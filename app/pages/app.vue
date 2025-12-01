@@ -33,7 +33,7 @@
           </UButton>
           <UButton
             icon="i-lucide-plus"
-            @click="openCreateEditor"
+            @click="() => openCreateEditor()"
           >
             New order
           </UButton>
