@@ -167,7 +167,7 @@
               <ProseCallout
                 type="tip"
                 icon="i-lucide-tag"
-                to="/docs/tags"
+                to="/docs/features/tags"
               >
                 Add tags to your orders to help organize and categorize them.
               </ProseCallout>
