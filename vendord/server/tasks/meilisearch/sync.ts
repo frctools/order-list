@@ -16,7 +16,8 @@ interface ProductDocument {
   vendorType?: string;
   variantId?: string;
   variantTitle?: string;
-  sku?: string;
+  skus?: string[];
+  originalUrl?: string;
   updatedAt: string;
 }
 
@@ -65,7 +66,7 @@ export default defineTask({
         data.productData?.product || data.productData || data || {};
       const vendor = allVendors.find((v) => v.id === cached.vendorId);
       if (!vendor) {
-        throw new Error(`Vendor with ID ${cached.vendorId} not found`);
+        return undefined;
       }
 
       return {
@@ -91,7 +92,7 @@ export default defineTask({
               : `https://${vendor.hostname}/${product.handle}`
             : undefined,
       };
-    });
+    }).filter((doc) => doc !== undefined);
 
     const index = client.index(indexName);
     try {
