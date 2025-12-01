@@ -3,7 +3,7 @@ import { MeiliSearch } from 'meilisearch'
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const searchTerm = query.q as string
-  const limit = Math.min(Math.max(Number(query.limit) || 20, 1), 100)
+  const limit = Math.min(Math.max(Number(query.limit) || 5, 1), 100)
   if (!searchTerm) {
     return {
       hits: [],
