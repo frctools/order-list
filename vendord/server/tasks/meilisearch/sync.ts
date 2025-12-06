@@ -26,7 +26,7 @@ interface TaskResult {
   error?: string
   indexed?: number
   message?: string
-  taskUid?: number
+  taskUids?: number[]
   indexName?: string
 }
 
@@ -124,15 +124,20 @@ export default defineTask({
       sortableAttributes: ['price', 'updatedAt', 'title']
     })
 
-    const task = await index.addDocuments(documents, { primaryKey: 'id' })
-
-    await client.tasks.waitForTask(task.taskUid)
+    const chunkSize = 1000;
+    const tasks = [];
+    for (let i = 0; i < documents.length; i += chunkSize) {
+      const chunk = documents.slice(i, i + chunkSize)
+      const task = await index.addDocuments(chunk, { primaryKey: 'id' })
+      tasks.push(task.taskUid);
+      await client.tasks.waitForTask(task.taskUid, { timeout: 10000 })
+    }
 
     return {
       result: {
         success: true,
         indexed: documents.length,
-        taskUid: task.taskUid,
+        taskUids: tasks,
         indexName
       }
     }
