@@ -1,43 +1,43 @@
-import { defineTask, runTask } from "nitropack/runtime";
-import { useDB } from "../../../server/utils/db";
-import { vendors, productCache } from "../../../server/utils/schema";
-import { setTimeout } from "timers/promises";
+import { defineTask, runTask } from 'nitropack/runtime'
+import { useDB } from '../../../server/utils/db'
+import { vendors, productCache } from '../../../server/utils/schema'
+import { setTimeout } from 'timers/promises'
 import {
   getBigCommerceToken,
   fetchBigCommerceProducts,
-  bigCommerceToUnified,
-} from "../utils/bigcommerce";
+  bigCommerceToUnified
+} from '../utils/bigcommerce'
 
 export default defineTask({
   meta: {
-    name: "scrape",
-    description: "Run scraping tasks",
+    name: 'scrape',
+    description: 'Run scraping tasks'
   },
   async run({ payload }) {
     // get all vendors from the database
-    const db = useDB();
+    const db = useDB()
 
-    const vendorsList = await db.select().from(vendors);
+    const vendorsList = await db.select().from(vendors)
 
     for (const vendor of vendorsList) {
       try {
         // perform scraping based on vendor type
-        if (vendor.type === "shopify") {
-          const shopifyStoreUrl = `https://${vendor.hostname}`;
+        if (vendor.type === 'shopify') {
+          const shopifyStoreUrl = `https://${vendor.hostname}`
           // paginate through products
-          let page = 1;
-          let hasMore = true;
+          let page = 1
+          let hasMore = true
 
           while (hasMore) {
             const response = await fetch(
-              `${shopifyStoreUrl}/products.json?limit=250&page=${page}`,
-            );
+              `${shopifyStoreUrl}/products.json?limit=250&page=${page}`
+            )
             if (!response.ok) {
-              console.error(`Failed to fetch products from ${shopifyStoreUrl}`);
-              break;
+              console.error(`Failed to fetch products from ${shopifyStoreUrl}`)
+              break
             }
-            const data = await response.json();
-            const products = data.products;
+            const data = await response.json()
+            const products = data.products
 
             // store products in productCache
             for (const product of products) {
@@ -47,42 +47,42 @@ export default defineTask({
                   vendorId: vendor.id,
                   id: `${vendor.hostname}:${product.handle}`,
                   productJson: product,
-                  updatedAt: new Date(product.updated_at),
+                  updatedAt: new Date(product.updated_at)
                 })
                 .onConflictDoUpdate({
                   target: [productCache.id],
                   set: {
                     productJson: product,
-                    updatedAt: new Date(product.updated_at),
-                  },
-                });
+                    updatedAt: new Date(product.updated_at)
+                  }
+                })
             }
 
             if (products.length < 250) {
-              hasMore = false;
+              hasMore = false
             } else {
-              page += 1;
+              page += 1
             }
-            await setTimeout(100);
+            await setTimeout(100)
           }
-        } else if (vendor.type === "bigcommerce") {
+        } else if (vendor.type === 'bigcommerce') {
           try {
             // Get storefront token and cookies
             const { token, cookies } = await getBigCommerceToken(
-              vendor.hostname,
-            );
+              vendor.hostname
+            )
 
             // Fetch all products using GraphQL pagination
             const products = await fetchBigCommerceProducts(
               vendor.hostname,
               token,
-              cookies,
-            );
+              cookies
+            )
 
             // Store products in productCache
             for (const product of products) {
-              const unified = bigCommerceToUnified(product);
-              const productId = `${vendor.hostname}:${unified.handle}`;
+              const unified = bigCommerceToUnified(product)
+              const productId = `${vendor.hostname}:${unified.handle}`
 
               await db
                 .insert(productCache)
@@ -90,37 +90,37 @@ export default defineTask({
                   vendorId: vendor.id,
                   id: productId,
                   productJson: JSON.stringify(unified),
-                  updatedAt: new Date(),
+                  updatedAt: new Date()
                 })
                 .onConflictDoUpdate({
                   target: [productCache.id],
                   set: {
                     productJson: JSON.stringify(unified),
-                    updatedAt: new Date(),
-                  },
-                });
+                    updatedAt: new Date()
+                  }
+                })
 
-              await setTimeout(10); // Small delay between inserts
+              await setTimeout(10) // Small delay between inserts
             }
 
             console.log(
-              `Scraped ${products.length} products from BigCommerce store: ${vendor.hostname}`,
-            );
+              `Scraped ${products.length} products from BigCommerce store: ${vendor.hostname}`
+            )
           } catch (error) {
             console.error(
               `Failed to scrape BigCommerce store ${vendor.hostname}:`,
-              error,
-            );
+              error
+            )
           }
-        } else if (vendor.type === "amazon") {
+        } else if (vendor.type === 'amazon') {
           // unimplemented
         }
       } catch (error) {
-        console.error(`Error processing vendor ${vendor.hostname}:`, error);
+        console.error(`Error processing vendor ${vendor.hostname}:`, error)
       }
     }
-    const { result } = await runTask("meilisearch:sync", { payload });
+    const { result } = await runTask('meilisearch:sync', { payload })
 
-    return { result };
-  },
-});
+    return { result }
+  }
+})

@@ -1,79 +1,88 @@
-import { defineTask } from "nitropack/runtime";
-import { MeiliSearch, MeiliSearchApiError } from "meilisearch";
-import { useDB } from "../../../../server/utils/db";
-import { productCache, vendors } from "../../../../server/utils/schema";
+import { defineTask } from 'nitropack/runtime'
+import { MeiliSearch, MeiliSearchApiError } from 'meilisearch'
+import { useDB } from '../../../../server/utils/db'
+import { productCache, vendors } from '../../../../server/utils/schema'
 
 interface ProductDocument {
-  id: string;
-  title: string;
-  description?: string;
-  image?: string;
-  price?: number;
-  currency?: string;
-  vendorId: string;
-  vendorName: string;
-  vendorHostname?: string;
-  vendorType?: string;
-  variantId?: string;
-  variantTitle?: string;
-  skus?: string[];
-  originalUrl?: string;
-  updatedAt: string;
+  id: string
+  title: string
+  description?: string
+  image?: string
+  price?: number
+  currency?: string
+  vendorId: string
+  vendorName: string
+  vendorHostname?: string
+  vendorType?: string
+  variantId?: string
+  variantTitle?: string
+  skus?: string[]
+  originalUrl?: string
+  updatedAt: string
 }
 
 interface TaskResult {
-  success: boolean;
-  error?: string;
-  indexed?: number;
-  message?: string;
-  taskUid?: number;
-  indexName?: string;
+  success: boolean
+  error?: string
+  indexed?: number
+  message?: string
+  taskUid?: number
+  indexName?: string
 }
 
 export default defineTask({
   meta: {
-    name: "meilisearch:sync",
-    description: "Sync all cached products to Meilisearch",
+    name: 'meilisearch:sync',
+    description: 'Sync all cached products to Meilisearch'
   },
   async run(): Promise<{ result: TaskResult }> {
-    const meiliHost = process.env.MEILISEARCH_HOST;
-    const meiliKey = process.env.MEILISEARCH_API_KEY;
-    const indexName = process.env.MEILISEARCH_INDEX || "products";
+    const meiliHost = process.env.MEILISEARCH_HOST
+    const meiliKey = process.env.MEILISEARCH_API_KEY
+    const indexName = process.env.MEILISEARCH_INDEX || 'products'
 
     if (!meiliHost) {
       return {
-        result: { success: false, error: "MEILISEARCH_HOST is not configured" },
-      };
+        result: { success: false, error: 'MEILISEARCH_HOST is not configured' }
+      }
     }
 
     const client = new MeiliSearch({
       host: meiliHost,
-      apiKey: meiliKey,
-    });
+      apiKey: meiliKey
+    })
 
-    const db = useDB();
-    const allProducts = await db.select().from(productCache);
-    const allVendors = await db.select().from(vendors);
+    const db = useDB()
+    const allProducts = await db.select().from(productCache)
+    const allVendors = await db.select().from(vendors)
     if (allProducts.length === 0) {
       return {
-        result: { success: true, indexed: 0, message: "No products to index" },
-      };
+        result: { success: true, indexed: 0, message: 'No products to index' }
+      }
     }
 
     const documents: ProductDocument[] = allProducts.map((cached) => {
-      const data = JSON.parse(cached.productJson);
-      const product =
-        data.productData?.product || data.productData || data || {};
-      const vendor = allVendors.find((v) => v.id === cached.vendorId);
+      let data
+      try {
+        data = JSON.parse(cached.productJson)
+      } catch (error) {
+        console.error(
+          `Failed to parse product JSON for cached product ${cached.id}:`,
+          error
+        )
+        return undefined
+      }
+      const product
+        = data.productData?.product || data.productData || data || {}
+      const vendor = allVendors.find(v => v.id === cached.vendorId)
       if (!vendor) {
-        return undefined;
+        return undefined
       }
 
       return {
-        id: Buffer.from(cached.id).toString("base64").replace(/=/g, ""),
-        title: product.title || "Unknown Product",
+        id: Buffer.from(cached.id).toString('base64').replace(/=/g, ''),
+        title: product.title || 'Unknown Product',
         description:
-          product.description || product.body_html || "No description",
+          product.description || product.body_html || 'No description',
         image: product.image || product.images?.[0]?.src,
         price: product.price ?? product.variants?.[0]?.price,
         currency: product.currency,
@@ -87,45 +96,45 @@ export default defineTask({
         updatedAt: cached.updatedAt.toISOString(),
         originalUrl:
           product.url || product.handle
-            ? vendor.type === "shopify"
+            ? vendor.type === 'shopify'
               ? `https://${vendor.hostname}/products/${product.handle}`
               : `https://${vendor.hostname}/${product.handle}`
-            : undefined,
-      };
-    }).filter((doc) => doc !== undefined);
+            : undefined
+      }
+    }).filter(doc => doc !== undefined)
 
-    const index = client.index(indexName);
+    const index = client.index(indexName)
     try {
-      await index.fetchInfo();
+      await index.fetchInfo()
     } catch (error: any) {
       if (
-        error instanceof MeiliSearchApiError &&
-        error.cause?.code == "index_not_found"
+        error instanceof MeiliSearchApiError
+        && error.cause?.code == 'index_not_found'
       ) {
-        client.createIndex(indexName);
-        console.log(`Created index ${index}`);
+        client.createIndex(indexName)
+        console.log(`Created index ${index}`)
       } else {
-        throw error;
+        throw error
       }
     }
 
     await index.updateSettings({
-      searchableAttributes: ["title", "description", "vendorName", "skus"],
-      filterableAttributes: ["vendorId", "vendorType", "currency"],
-      sortableAttributes: ["price", "updatedAt", "title"],
-    });
+      searchableAttributes: ['title', 'description', 'vendorName', 'skus'],
+      filterableAttributes: ['vendorId', 'vendorType', 'currency'],
+      sortableAttributes: ['price', 'updatedAt', 'title']
+    })
 
-    const task = await index.addDocuments(documents, { primaryKey: "id" });
+    const task = await index.addDocuments(documents, { primaryKey: 'id' })
 
-    await client.tasks.waitForTask(task.taskUid);
+    await client.tasks.waitForTask(task.taskUid)
 
     return {
       result: {
         success: true,
         indexed: documents.length,
         taskUid: task.taskUid,
-        indexName,
-      },
-    };
-  },
-});
+        indexName
+      }
+    }
+  }
+})

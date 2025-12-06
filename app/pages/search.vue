@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { refDebounced } from '@vueuse/core'
 import { useRouteQuery } from '@vueuse/router'
+
 definePageMeta({
   layout: 'default'
 })
@@ -15,11 +16,11 @@ useSeoMeta({
   ogDescription: pageDescription
 })
 
-const searchTerm = useRouteQuery<string>('q','')
+const searchTerm = useRouteQuery<string>('q', '')
 const debouncedSearch = refDebounced(searchTerm, 300)
-const selectedVendors = useRouteQuery<string[]>('vendors',[])
-const sortBy = useRouteQuery<'relevance' | 'price-asc' | 'price-desc'>('sort','relevance')
-const viewMode = useRouteQuery<'grid' | 'list'>('view','grid')
+const selectedVendors = useRouteQuery<string[]>('vendors', [])
+const sortBy = useRouteQuery<'relevance' | 'price-asc' | 'price-desc'>('sort', 'relevance')
+const viewMode = useRouteQuery<'grid' | 'list'>('view', 'grid')
 
 const { data: searchResults, status } = await useFetch('/api/vendors/search', {
   query: {
