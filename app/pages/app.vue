@@ -541,7 +541,7 @@
         <div class="mt-6">
           <UButton
             icon="i-lucide-plus"
-            @click="openCreateEditor"
+            @click="() => openCreateEditor()"
           >
             Create order
           </UButton>
