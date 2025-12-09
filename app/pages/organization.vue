@@ -682,14 +682,17 @@ const memberTableRows = computed(() =>
 )
 
 const invitationTableRows = computed(() =>
-  invitations.value.map(invitation => ({
-    id: invitation.id,
-    email: invitation.email,
-    role: primaryRole(invitation),
-    status: invitation.status ?? 'pending',
-    expiresAt: invitation.expiresAt ?? null,
-    raw: invitation
-  }))
+  invitations.value
+    .filter(invitation => invitation.status !== 'canceled')
+    .filter(invitation => invitation.status !== 'accepted')
+    .map(invitation => ({
+      id: invitation.id,
+      email: invitation.email,
+      role: primaryRole(invitation),
+      status: invitation.status ?? 'pending',
+      expiresAt: invitation.expiresAt ?? null,
+      raw: invitation
+    }))
 )
 type MemberTableRow = (typeof memberTableRows)['value'][number]
 
