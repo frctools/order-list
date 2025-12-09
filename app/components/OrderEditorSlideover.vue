@@ -467,7 +467,7 @@ function handleSubmit(event: FormSubmitEvent<OrderFormSchema>) {
     variantId: event.data.variantId ?? undefined,
     variantTitle: event.data.variantTitle ?? undefined,
     externalUrl: event.data.externalUrl ?? undefined,
-    tagIds: formState.tagIds.length > 0 ? formState.tagIds : undefined
+    tagIds: formState.tagIds.length > 0 ? formState.tagIds : []
   }
 
   emit('submit', {
