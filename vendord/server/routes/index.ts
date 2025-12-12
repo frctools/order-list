@@ -62,7 +62,7 @@ export default eventHandler(async (event) => {
   if (cached) {
     const cachedData = JSON.parse(cached.productJson)
     return {
-      productData: { product: { ...cachedData } },
+      productData: { product: cachedData },
       variantId,
       vendor,
       cached: true
@@ -214,13 +214,13 @@ export default eventHandler(async (event) => {
       .insert(productCache)
       .values({
         id: productId,
-        productJson: JSON.stringify(result),
+        productJson: JSON.stringify(product),
         vendorId: genericVendor.id
       })
       .onConflictDoUpdate({
         target: productCache.id,
         set: {
-          productJson: JSON.stringify(result),
+          productJson: JSON.stringify(product),
           updatedAt: new Date()
         }
       })
@@ -444,13 +444,13 @@ export default eventHandler(async (event) => {
       .insert(productCache)
       .values({
         id: productId,
-        productJson: JSON.stringify(result),
+        productJson: JSON.stringify(unified),
         vendorId: vendor.id
       })
       .onConflictDoUpdate({
         target: productCache.id,
         set: {
-          productJson: JSON.stringify(result),
+          productJson: JSON.stringify(unified),
           updatedAt: new Date()
         }
       })
@@ -520,13 +520,13 @@ export default eventHandler(async (event) => {
       .insert(productCache)
       .values({
         id: productId,
-        productJson: JSON.stringify(result),
+        productJson: JSON.stringify(result.productData.product),
         vendorId: vendor.id
       })
       .onConflictDoUpdate({
         target: productCache.id,
         set: {
-          productJson: JSON.stringify(result),
+          productJson: JSON.stringify(result.productData.product),
           updatedAt: new Date()
         }
       })
