@@ -1,321 +1,321 @@
-import { z } from 'zod'
-import { useDB } from '../../../server/utils/db'
-import { vendors, productCache } from '../../../server/utils/schema'
-import { eq } from 'drizzle-orm'
-import parse from '../../../server/utils/set-cookie-parser'
-import { parseHTML } from 'linkedom'
-import { createError, eventHandler, getHeaders, getQuery } from 'h3'
-import { titleCase } from 'scule'
+import { z } from "zod";
+import { useDB } from "../../../server/utils/db";
+import { vendors, productCache } from "../../../server/utils/schema";
+import { eq } from "drizzle-orm";
+import parse from "../../../server/utils/set-cookie-parser";
+import { parseHTML } from "linkedom";
+import { createError, eventHandler, getHeaders, getQuery } from "h3";
+import { titleCase } from "scule";
 import {
   bigCommerceToUnified,
   getBigCommerceToken,
-  type BigCommerceProduct
-} from '../utils/bigcommerce'
+  type BigCommerceProduct,
+} from "../utils/bigcommerce";
 
 const querySchema = z.object({
-  url: z.string().trim().min(1, 'URL is required').url('Enter a valid URL')
-})
+  url: z.string().trim().min(1, "URL is required").url("Enter a valid URL"),
+});
 
 function generateProductId(urlObj: URL, vendorType?: string | null): string {
-  const hostname = urlObj.hostname
+  const hostname = urlObj.hostname;
 
-  if (vendorType === 'shopify') {
-    const pathParts = urlObj.pathname.split('/').filter(Boolean)
-    const productIndex = pathParts.indexOf('products')
+  if (vendorType === "shopify") {
+    const pathParts = urlObj.pathname.split("/").filter(Boolean);
+    const productIndex = pathParts.indexOf("products");
     if (productIndex !== -1 && pathParts[productIndex + 1]) {
-      const handle = pathParts[productIndex + 1]
-      return `${hostname}:${handle}`
+      const handle = pathParts[productIndex + 1];
+      return `${hostname}:${handle}`;
     }
   }
 
-  const cleanPath = urlObj.pathname.replace(/^\/|\/$/g, '') || '/'
-  return `${hostname}:${cleanPath}`
+  const cleanPath = urlObj.pathname.replace(/^\/|\/$/g, "") || "/";
+  return `${hostname}:${cleanPath}`;
 }
 
 export default eventHandler(async (event) => {
-  const rawQuery = getQuery(event)
-  const parsed = querySchema.safeParse(rawQuery)
+  const rawQuery = getQuery(event);
+  const parsed = querySchema.safeParse(rawQuery);
   if (!parsed.success) {
     throw createError({
       statusCode: 400,
       statusMessage:
-        parsed.error.flatten().formErrors.join(', ') || 'Invalid query',
-      data: parsed.error.flatten().fieldErrors
-    })
+        parsed.error.flatten().formErrors.join(", ") || "Invalid query",
+      data: parsed.error.flatten().fieldErrors,
+    });
   }
 
-  const { url } = parsed.data
-  const urlObj = new URL(url)
-  const variantId = urlObj.searchParams.get('variant') ?? null
+  const { url } = parsed.data;
+  const urlObj = new URL(url);
+  const variantId = urlObj.searchParams.get("variant") ?? null;
   const vendor = await useDB().query.vendors.findFirst({
-    where: eq(vendors.hostname, urlObj.hostname)
-  })
+    where: eq(vendors.hostname, urlObj.hostname),
+  });
 
   // Generate product ID and check cache
-  const productId = generateProductId(urlObj, vendor?.type)
-  const db = useDB()
+  const productId = generateProductId(urlObj, vendor?.type);
+  const db = useDB();
 
   const cached = await db.query.productCache.findFirst({
-    where: eq(productCache.id, productId)
-  })
+    where: eq(productCache.id, productId),
+  });
 
   if (cached) {
-    const cachedData = JSON.parse(cached.productJson)
+    const cachedData = JSON.parse(cached.productJson);
     return {
       productData: { product: cachedData },
       variantId,
       vendor,
-      cached: true
-    }
+      cached: true,
+    };
   }
-  const requestHeaders = getHeaders(event)
+  const requestHeaders = getHeaders(event);
   const headerOrDefault = (name: string) => {
-    const lowerName = name.toLowerCase()
-    const raw = requestHeaders[name] ?? requestHeaders[lowerName]
+    const lowerName = name.toLowerCase();
+    const raw = requestHeaders[name] ?? requestHeaders[lowerName];
     if (Array.isArray(raw)) {
-      return raw.join(', ')
+      return raw.join(", ");
     }
-    return raw ?? ''
-  }
-  const defaultUserAgent
-    = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36'
+    return raw ?? "";
+  };
+  const defaultUserAgent =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36";
 
   if (!vendor) {
     const genericRes = await fetch(url, {
       headers: {
-        'User-Agent': headerOrDefault('User-Agent') || defaultUserAgent,
-        'Accept-Language': headerOrDefault('Accept-Language'),
-        'Accept-Encoding': headerOrDefault('Accept-Encoding'),
-        'Accept': headerOrDefault('Accept') || 'text/html,application/xhtml+xml'
-      }
-    })
+        "User-Agent": headerOrDefault("User-Agent") || defaultUserAgent,
+        "Accept-Language": headerOrDefault("Accept-Language"),
+        "Accept-Encoding": headerOrDefault("Accept-Encoding"),
+        Accept: headerOrDefault("Accept") || "text/html,application/xhtml+xml",
+      },
+    });
     if (!genericRes.ok) {
       throw createError({
         statusCode: 404,
-        statusMessage: 'Product not found on vendor site'
-      })
+        statusMessage: "Product not found on vendor site",
+      });
     }
-    const html = await genericRes.text()
-    const { document } = parseHTML(html)
+    const html = await genericRes.text();
+    const { document } = parseHTML(html);
 
     const getMetaContent = (selectors: string[]) => {
       for (const selector of selectors) {
-        const el = document.querySelector(selector)
+        const el = document.querySelector(selector);
         if (!el) {
-          continue
+          continue;
         }
-        const attrContent
-          = el.getAttribute('content') ?? el.getAttribute('value')
-        const raw = attrContent ?? el.textContent
+        const attrContent =
+          el.getAttribute("content") ?? el.getAttribute("value");
+        const raw = attrContent ?? el.textContent;
         if (raw && raw.trim()) {
-          return raw.trim()
+          return raw.trim();
         }
       }
-      return undefined
-    }
+      return undefined;
+    };
 
     const parsePriceFromString = (value?: string) => {
       if (!value) {
-        return undefined
+        return undefined;
       }
-      const normalized = value.replace(/[^0-9.,]/g, '')
+      const normalized = value.replace(/[^0-9.,]/g, "");
       if (!normalized) {
-        return undefined
+        return undefined;
       }
-      const hasDot = normalized.includes('.')
-      const hasComma = normalized.includes(',')
+      const hasDot = normalized.includes(".");
+      const hasComma = normalized.includes(",");
       if (hasComma && !hasDot) {
-        return Number(normalized.replace(/,/g, '.'))
+        return Number(normalized.replace(/,/g, "."));
       }
-      return Number(normalized.replace(/,/g, ''))
-    }
+      return Number(normalized.replace(/,/g, ""));
+    };
 
-    const title
-      = getMetaContent([
+    const title =
+      getMetaContent([
         'meta[property="og:title"]',
         'meta[name="twitter:title"]',
         'meta[name="title"]',
-        'title',
-        'h1'
-      ]) || urlObj.hostname
+        "title",
+        "h1",
+      ]) || urlObj.hostname;
     const description = getMetaContent([
       'meta[property="og:description"]',
       'meta[name="description"]',
-      'meta[name="twitter:description"]'
-    ])
+      'meta[name="twitter:description"]',
+    ]);
     const imageUrl = getMetaContent([
       'meta[property="og:image"]',
       'meta[name="twitter:image"]',
-      'meta[itemprop="image"]'
-    ])
+      'meta[itemprop="image"]',
+    ]);
     const priceString = getMetaContent([
       'meta[property="product:price:amount"]',
       'meta[property="og:price:amount"]',
       'meta[itemprop="price"]',
       '[itemprop="price"]',
-      '.price'
-    ])
+      ".price",
+    ]);
     const currency = getMetaContent([
       'meta[property="product:price:currency"]',
       'meta[itemprop="priceCurrency"]',
-      'meta[name="currency"]'
-    ])
-    const priceValue = parsePriceFromString(priceString)
+      'meta[name="currency"]',
+    ]);
+    const priceValue = parsePriceFromString(priceString);
 
     const product: {
-      title: string
-      description?: string
-      image?: string
-      price?: number
-      currency?: string
-      variants?: Array<{ id: string, title: string, price?: number }>
-    } = { title }
+      title: string;
+      description?: string;
+      image?: string;
+      price?: number;
+      currency?: string;
+      variants?: Array<{ id: string; title: string; price?: number }>;
+    } = { title };
     if (description) {
-      product.description = description
+      product.description = description;
     }
     if (imageUrl) {
-      product.image = imageUrl
+      product.image = imageUrl;
     }
     if (priceValue !== undefined) {
-      product.price = priceValue
+      product.price = priceValue;
     }
     if (currency) {
-      product.currency = currency
+      product.currency = currency;
     }
-    const variants
-      = priceValue !== undefined || variantId
+    const variants =
+      priceValue !== undefined || variantId
         ? [
             {
-              id: variantId || 'default',
-              title: 'Default',
-              price: priceValue
-            }
+              id: variantId || "default",
+              title: "Default",
+              price: priceValue,
+            },
           ]
-        : []
+        : [];
     if (variants.length) {
-      product.variants = variants
+      product.variants = variants;
     }
 
     const genericVendor = {
-      id: urlObj.hostname.split('.').slice(0, -1).join('.'),
-      name: titleCase(urlObj.hostname.split('.').slice(0, -1).join('.')),
+      id: urlObj.hostname.split(".").slice(0, -1).join("."),
+      name: titleCase(urlObj.hostname.split(".").slice(0, -1).join(".")),
       hostname: urlObj.hostname,
-      type: 'generic' as const
-    }
+      type: "generic" as const,
+    };
 
     const result = {
       vendor: genericVendor,
       productData: {
-        product
-      }
-    }
+        product,
+      },
+    };
 
     await db
       .insert(productCache)
       .values({
         id: productId,
         productJson: JSON.stringify(product),
-        vendorId: genericVendor.id
+        vendorId: genericVendor.id,
       })
       .onConflictDoUpdate({
         target: productCache.id,
         set: {
           productJson: JSON.stringify(product),
-          updatedAt: new Date()
-        }
-      })
+          updatedAt: new Date(),
+        },
+      });
 
     return {
       ...result,
-      variantId
-    }
+      variantId,
+    };
   }
-  if (vendor.type == 'shopify') {
+  if (vendor.type == "shopify") {
     // strip collections from path
-    const pathParts = urlObj.pathname.split('/').filter(Boolean)
-    const productIndex = pathParts.indexOf('products')
-    pathParts.splice(0, productIndex)
-    const productPath = pathParts.join('/')
+    const pathParts = urlObj.pathname.split("/").filter(Boolean);
+    const productIndex = pathParts.indexOf("products");
+    pathParts.splice(0, productIndex);
+    const productPath = pathParts.join("/");
 
-    const expectedPrefix = 'products/'
+    const expectedPrefix = "products/";
     // pull product.json from shopify
     if (productPath.startsWith(expectedPrefix)) {
-      const productHandle = productPath.slice(expectedPrefix.length)
-      const productJsonUrl = `${urlObj.origin}/products/${productHandle}.json`
+      const productHandle = productPath.slice(expectedPrefix.length);
+      const productJsonUrl = `${urlObj.origin}/products/${productHandle}.json`;
 
-      const res = await fetch(productJsonUrl)
+      const res = await fetch(productJsonUrl);
       if (!res.ok) {
         throw createError({
           statusCode: 404,
-          statusMessage: 'Product not found on vendor site'
-        })
+          statusMessage: "Product not found on vendor site",
+        });
       }
-      const productData = await res.json()
+      const productData = await res.json();
 
       const result = {
         vendor,
-        productData
-      }
+        productData,
+      };
 
       await db
         .insert(productCache)
         .values({
           id: productId,
           productJson: JSON.stringify(productData.product),
-          vendorId: vendor.id
+          vendorId: vendor.id,
         })
         .onConflictDoUpdate({
           target: productCache.id,
           set: {
             productJson: JSON.stringify(productData.product),
-            updatedAt: new Date()
-          }
-        })
+            updatedAt: new Date(),
+          },
+        });
 
       return {
         ...result,
-        variantId
-      }
+        variantId,
+      };
     }
   }
-  if (vendor.type == 'bigcommerce') {
-    const token = await getBigCommerceToken(vendor.hostname)
+  if (vendor.type == "bigcommerce") {
+    const token = await getBigCommerceToken(vendor.hostname);
     const res = await fetch(url, {
       headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
-      }
-    })
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3",
+      },
+    });
     if (!res.ok) {
       throw createError({
         statusCode: 404,
-        statusMessage: 'Product not found on vendor site'
-      })
+        statusMessage: "Product not found on vendor site",
+      });
     }
-    const html = await res.text()
+    const html = await res.text();
 
     const productIdMatch = html.match(
-      /<input type="hidden" name="product_id" value="(\d+)"/
-    )
+      /<input type="hidden" name="product_id" value="(\d+)"/,
+    );
 
     if (!token.token || !productIdMatch) {
       throw createError({
         statusCode: 500,
         statusMessage:
-          'Could not extract storefront token or product ID from page'
-      })
+          "Could not extract storefront token or product ID from page",
+      });
     }
-    const setCookies = res.headers.get('set-cookie') || ''
-    const cookies = parse(setCookies)
-    const cookieString = cookies.map(c => `${c.name}=${c.value}`).join('; ')
+    const setCookies = res.headers.get("set-cookie") || "";
+    const cookies = parse(setCookies);
+    const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join("; ");
 
-    const STOREFRONT_TOKEN = token.token
+    const STOREFRONT_TOKEN = token.token;
     const graphQlRes = await fetch(`https://${vendor.hostname}/graphql`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${STOREFRONT_TOKEN}`,
-        'Cookie': cookieString
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${STOREFRONT_TOKEN}`,
+        Cookie: cookieString,
       },
       body: JSON.stringify({
         query: `query getProduct($entityId: Int!) {
@@ -419,85 +419,85 @@ export default eventHandler(async (event) => {
   }
 }`,
         variables: {
-          entityId: parseInt(productIdMatch[1], 10)
-        }
-      })
-    })
-    const graphQlData = await graphQlRes.json()
+          entityId: parseInt(productIdMatch[1], 10),
+        },
+      }),
+    });
+    const graphQlData = await graphQlRes.json();
 
     if (!graphQlRes.ok || !graphQlData.data?.site?.product) {
-      console.log(graphQlData)
+      console.log(graphQlData);
       throw createError({
         statusCode: 404,
-        statusMessage: 'Product not found on vendor site'
-      })
+        statusMessage: "Product not found on vendor site",
+      });
     }
-    const p = graphQlData.data.site.product as BigCommerceProduct
-    const unified = bigCommerceToUnified(p)
+    const p = graphQlData.data.site.product as BigCommerceProduct;
+    const unified = bigCommerceToUnified(p);
 
     const result = {
       vendor,
-      productData: { product: unified }
-    }
+      productData: { product: unified },
+    };
 
     await db
       .insert(productCache)
       .values({
         id: productId,
         productJson: JSON.stringify(unified),
-        vendorId: vendor.id
+        vendorId: vendor.id,
       })
       .onConflictDoUpdate({
         target: productCache.id,
         set: {
           productJson: JSON.stringify(unified),
-          updatedAt: new Date()
-        }
-      })
+          updatedAt: new Date(),
+        },
+      });
 
     return {
       ...result,
-      variantId
-    }
+      variantId,
+    };
   }
-  if (vendor.type == 'amazon') {
+  if (vendor.type == "amazon") {
     // fetch url
     // pass along user agent, accept language, accept encoding headers, accept headers
     const res = await fetch(url, {
       headers: {
-        'User-Agent': headerOrDefault('User-Agent') || defaultUserAgent,
-        'Accept-Language': headerOrDefault('Accept-Language'),
-        'Accept-Encoding': headerOrDefault('Accept-Encoding'),
-        'Accept': headerOrDefault('Accept')
-      }
-    })
+        "User-Agent": headerOrDefault("User-Agent") || defaultUserAgent,
+        "Accept-Language": headerOrDefault("Accept-Language"),
+        "Accept-Encoding": headerOrDefault("Accept-Encoding"),
+        Accept: headerOrDefault("Accept"),
+      },
+    });
     if (!res.ok) {
       throw createError({
         statusCode: 404,
-        statusMessage: 'Product not found on vendor site'
-      })
+        statusMessage: "Product not found on vendor site",
+      });
     }
-    const html = await res.text()
-    const { document } = parseHTML(html)
+    const html = await res.text();
+    const { document } = parseHTML(html);
     // amazon uses a lot of dynamic content, so we need to parse the html
     // and look for the product title and price
-    const titleElement = document.querySelector('#productTitle')
-    const priceWhole = document.querySelector('.a-price-whole')
-    const priceFraction = document.querySelector('.a-price-fraction')
+    const titleElement = document.querySelector("#productTitle");
+    const priceWhole = document.querySelector(".a-price-whole");
+    const priceFraction = document.querySelector(".a-price-fraction");
     if (!titleElement || !priceWhole) {
       throw createError({
         statusCode: 500,
-        statusMessage: 'Could not extract product data from page'
-      })
+        statusMessage: "Could not extract product data from page",
+      });
     }
-    const title = titleElement.textContent.trim()
+    const title = titleElement.textContent.trim();
     const price = parseFloat(
-      priceWhole.textContent.replace(/[^\d]/g, '')
-      + '.'
-      + (priceFraction
-        ? priceFraction.textContent.replace(/[^\d]/g, '')
-        : '00')
-    )
+      priceWhole.textContent.replace(/[^\d]/g, "") +
+        "." +
+        (priceFraction
+          ? priceFraction.textContent.replace(/[^\d]/g, "")
+          : "00"),
+    );
 
     const result = {
       vendor,
@@ -506,38 +506,38 @@ export default eventHandler(async (event) => {
           title,
           variants: [
             {
-              id: 'default',
-              title: 'Default',
-              price
-            }
+              id: "default",
+              title: "Default",
+              price,
+            },
           ],
-          price
-        }
-      }
-    }
+          price,
+        },
+      },
+    };
 
     await db
       .insert(productCache)
       .values({
         id: productId,
         productJson: JSON.stringify(result.productData.product),
-        vendorId: vendor.id
+        vendorId: vendor.id,
       })
       .onConflictDoUpdate({
         target: productCache.id,
         set: {
           productJson: JSON.stringify(result.productData.product),
-          updatedAt: new Date()
-        }
-      })
+          updatedAt: new Date(),
+        },
+      });
 
     return {
       ...result,
-      variantId
-    }
+      variantId,
+    };
   }
   throw createError({
     statusCode: 400,
-    statusMessage: 'Unsupported vendor type'
-  })
-})
+    statusMessage: "Unsupported vendor type",
+  });
+});

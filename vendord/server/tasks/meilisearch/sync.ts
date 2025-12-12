@@ -92,7 +92,7 @@ export default defineTask({
         vendorType: vendor.type,
         variantId: product.variants?.[0]?.id,
         variantTitle: product.variants?.[0]?.title,
-        skus: [...(product.variants.map((v: any) => v.sku || v.id) || [])],
+        skus: [...(product.variants?.map((v: any) => v.sku || v.id) || [])],
         updatedAt: cached.updatedAt.toISOString(),
         originalUrl:
           product.url || product.handle
