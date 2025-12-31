@@ -584,7 +584,6 @@ import {
 } from 'vue'
 import { z } from 'zod'
 import type { FormSubmitEvent, TableColumn } from '#ui/types'
-import { a } from '#build/ui/prose'
 
 const auth = useAuth()
 const toast = useToast()
