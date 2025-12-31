@@ -1,96 +1,119 @@
 <script setup lang="ts">
-import { refDebounced } from '@vueuse/core'
-import { useRouteQuery } from '@vueuse/router'
+import { refDebounced } from "@vueuse/core";
+import { useRouteQuery } from "@vueuse/router";
 
 definePageMeta({
-  layout: 'default'
-})
+  layout: "default",
+});
 
-const pageTitle = 'Search Parts'
-const pageDescription = 'Search for parts and products across all vendors.'
+const pageTitle = "Search Parts";
+const pageDescription = "Search for parts and products across all vendors.";
 
 useSeoMeta({
   title: pageTitle,
   description: pageDescription,
   ogTitle: pageTitle,
-  ogDescription: pageDescription
-})
+  ogDescription: pageDescription,
+});
 
-const searchTerm = useRouteQuery<string>('q', '')
-const debouncedSearch = refDebounced(searchTerm, 300)
-const selectedVendors = useRouteQuery<string[]>('vendors', [])
-const sortBy = useRouteQuery<'relevance' | 'price-asc' | 'price-desc'>('sort', 'relevance')
-const viewMode = useRouteQuery<'grid' | 'list'>('view', 'grid')
+const searchTerm = useRouteQuery<string>("q", "");
+const debouncedSearch = refDebounced(searchTerm, 300);
+const selectedVendors = useRouteQuery<string[]>("vendors", []);
+const sortBy = useRouteQuery<"relevance" | "price-asc" | "price-desc">(
+  "sort",
+  "relevance",
+);
+const viewMode = useRouteQuery<"grid" | "list">("view", "grid");
 
-const { data: searchResults, status } = await useFetch('/api/vendors/search', {
-  query: {
-    q: debouncedSearch,
-    limit: 20
+interface SearchResultItem {
+  id: string;
+  title: string;
+  description: string;
+  vendorName: string;
+  vendorId: string;
+  image: string;
+  price: number;
+  currency: string;
+  originalUrl: string;
+}
+
+interface SearchResponse {
+  hits: SearchResultItem[];
+}
+
+const { data: searchData, status } = await useFetch<SearchResponse>(
+  "/api/vendors/search",
+  {
+    query: {
+      q: debouncedSearch,
+      limit: 20,
+    },
+    lazy: true,
   },
-  transform: (data) => {
-    return data.hits.map((item: any) => ({
-      id: item.id,
-      title: item.title,
-      description: item.description?.replace(/<[^>]*>?/gm, '') || '',
-      vendorName: item.vendorName,
-      vendorId: item.vendorId,
-      image: item.image,
-      price: item.price,
-      currency: item.currency,
-      originalUrl: item.originalUrl
-    }))
-  },
-  lazy: true,
-  default: () => []
-})
+);
+
+const searchResults = computed((): SearchResultItem[] => {
+  if (!searchData.value?.hits) return [];
+  return searchData.value.hits.map((item) => ({
+    id: item.id,
+    title: item.title,
+    description: (item.description || "").replace(/<[^>]*>?/gm, ""),
+    vendorName: item.vendorName,
+    vendorId: item.vendorId,
+    image: item.image,
+    price: item.price,
+    currency: item.currency,
+    originalUrl: item.originalUrl,
+  }));
+});
 
 const availableVendors = computed(() => {
-  const vendors = new Set<string>()
+  const vendors = new Set<string>();
   searchResults.value?.forEach((item) => {
-    if (item.vendorName) vendors.add(item.vendorName)
-  })
-  return Array.from(vendors).map(v => ({ label: v, value: v }))
-})
+    if (item.vendorName) vendors.add(item.vendorName);
+  });
+  return Array.from(vendors).map((v) => ({ label: v, value: v }));
+});
 
 const filteredResults = computed(() => {
-  let results = searchResults.value || []
+  let results = searchResults.value || [];
 
   if (selectedVendors.value.length > 0) {
-    results = results.filter(item =>
-      selectedVendors.value.includes(item.vendorName)
-    )
+    results = results.filter((item) =>
+      selectedVendors.value.includes(item.vendorName),
+    );
   }
 
-  if (sortBy.value === 'price-asc') {
-    results = [...results].sort((a, b) => (a.price || 0) - (b.price || 0))
-  } else if (sortBy.value === 'price-desc') {
-    results = [...results].sort((a, b) => (b.price || 0) - (a.price || 0))
+  if (sortBy.value === "price-asc") {
+    results = [...results].sort((a, b) => (a.price || 0) - (b.price || 0));
+  } else if (sortBy.value === "price-desc") {
+    results = [...results].sort((a, b) => (b.price || 0) - (a.price || 0));
   }
 
-  return results
-})
+  return results;
+});
 
 const sortOptions = [
-  { label: 'Relevance', value: 'relevance' },
-  { label: 'Price: Low to High', value: 'price-asc' },
-  { label: 'Price: High to Low', value: 'price-desc' }
-]
+  { label: "Relevance", value: "relevance" },
+  { label: "Price: Low to High", value: "price-asc" },
+  { label: "Price: High to Low", value: "price-desc" },
+];
 
 function formatPrice(price: number | undefined, currency: string | undefined) {
-  if (price === undefined || price === null) return null
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currency || 'USD'
-  }).format(price)
+  if (price === undefined || price === null) return null;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currency || "USD",
+  }).format(price);
 }
 
 function clearFilters() {
-  selectedVendors.value = []
-  sortBy.value = 'relevance'
+  selectedVendors.value = [];
+  sortBy.value = "relevance";
 }
 
 function getAddToOrderUrl(originalUrl: string) {
-  return `/app?add=${encodeURIComponent(originalUrl)}`
+  return `/app?add=${encodeURIComponent(originalUrl)}`;
 }
 </script>
 
@@ -181,17 +204,12 @@ function getAddToOrderUrl(originalUrl: string) {
         />
       </div>
 
-      <UPageCard
-        v-else-if="!debouncedSearch"
-        class="text-center py-12"
-      >
+      <UPageCard v-else-if="!debouncedSearch" class="text-center py-12">
         <UIcon
           name="i-lucide-search"
           class="w-12 h-12 mx-auto mb-4 text-muted"
         />
-        <h3 class="text-lg font-medium mb-2">
-          Start searching
-        </h3>
+        <h3 class="text-lg font-medium mb-2">Start searching</h3>
         <p class="text-muted">
           Enter a search term to find parts across all vendors
         </p>
@@ -205,12 +223,8 @@ function getAddToOrderUrl(originalUrl: string) {
           name="i-lucide-package-x"
           class="w-12 h-12 mx-auto mb-4 text-muted"
         />
-        <h3 class="text-lg font-medium mb-2">
-          No results found
-        </h3>
-        <p class="text-muted">
-          Try adjusting your search term or filters
-        </p>
+        <h3 class="text-lg font-medium mb-2">No results found</h3>
+        <p class="text-muted">Try adjusting your search term or filters</p>
       </UPageCard>
 
       <div
@@ -230,15 +244,9 @@ function getAddToOrderUrl(originalUrl: string) {
               :src="item.image"
               :alt="item.title"
               class="w-full max-w-64 h-auto object-contain"
-            >
-            <div
-              v-else
-              class="w-full h-full flex items-center justify-center"
-            >
-              <UIcon
-                name="i-lucide-package"
-                class="w-12 h-12 text-muted"
-              />
+            />
+            <div v-else class="w-full h-full flex items-center justify-center">
+              <UIcon name="i-lucide-package" class="w-12 h-12 text-muted" />
             </div>
           </div>
 
@@ -292,10 +300,7 @@ function getAddToOrderUrl(originalUrl: string) {
         </UPageCard>
       </div>
 
-      <div
-        v-else
-        class="space-y-3"
-      >
+      <div v-else class="space-y-3">
         <UPageCard
           v-for="item in filteredResults"
           :key="item.id"
@@ -309,15 +314,9 @@ function getAddToOrderUrl(originalUrl: string) {
               :src="item.image"
               :alt="item.title"
               class="w-full h-full object-contain"
-            >
-            <div
-              v-else
-              class="w-full h-full flex items-center justify-center"
-            >
-              <UIcon
-                name="i-lucide-package"
-                class="w-8 h-8 text-muted"
-              />
+            />
+            <div v-else class="w-full h-full flex items-center justify-center">
+              <UIcon name="i-lucide-package" class="w-8 h-8 text-muted" />
             </div>
           </div>
 

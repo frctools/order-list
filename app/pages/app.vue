@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-[var(--ui-bg)]">
+  <div class="min-h-screen bg-default">
     <UContainer class="mx-auto flex flex-col gap-10 py-10">
       <header class="flex flex-wrap items-center justify-between gap-4">
         <div>

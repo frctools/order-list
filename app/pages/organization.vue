@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-[var(--ui-bg)]">
+  <div class="min-h-screen bg-default">
     <UContainer class="mx-auto flex flex-col gap-8 py-10">
       <header class="flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -188,12 +188,12 @@
             class="space-y-4"
           >
             <UAlert
-              v-if="membersError"
+              v-if="membersErrorMessage"
               color="error"
               variant="soft"
               icon="i-lucide-alert-triangle"
               title="Unable to load members"
-              :description="membersError"
+              :description="membersErrorMessage"
             />
 
             <UCard>
@@ -214,7 +214,7 @@
                     variant="soft"
                     icon="i-lucide-refresh-ccw"
                     :loading="membersLoading"
-                    @click="refreshMembers"
+                    @click="() => refreshMembers()"
                   >
                     Refresh
                   </UButton>
@@ -300,12 +300,12 @@
             class="space-y-4"
           >
             <UAlert
-              v-if="invitationsError"
+              v-if="invitationsErrorMessage"
               color="error"
               variant="soft"
               icon="i-lucide-alert-triangle"
               title="Unable to load invitations"
-              :description="invitationsError"
+              :description="invitationsErrorMessage"
             />
 
             <UCard>
@@ -326,7 +326,7 @@
                     variant="soft"
                     icon="i-lucide-refresh-ccw"
                     :loading="invitationsLoading"
-                    @click="refreshInvitations"
+                    @click="() => refreshInvitations()"
                   >
                     Refresh
                   </UButton>
@@ -435,12 +435,12 @@
             />
 
             <UAlert
-              v-if="tagsError"
+              v-if="tagsErrorMessage"
               color="error"
               variant="soft"
               icon="i-lucide-alert-triangle"
               title="Unable to load tags"
-              :description="tagsError"
+              :description="tagsErrorMessage"
             />
 
             <UCard>
@@ -462,7 +462,7 @@
                       variant="soft"
                       icon="i-lucide-refresh-ccw"
                       :loading="tagsLoading"
-                      @click="refreshTags"
+                      @click="() => refreshTags()"
                     >
                       Refresh
                     </UButton>
@@ -579,12 +579,12 @@ import {
   computed,
   reactive,
   ref,
-  watch,
   type Ref,
   onServerPrefetch
 } from 'vue'
 import { z } from 'zod'
 import type { FormSubmitEvent, TableColumn } from '#ui/types'
+import { a } from '#build/ui/prose'
 
 const auth = useAuth()
 const toast = useToast()
@@ -617,13 +617,45 @@ type OrganizationInvitation = NonNullable<
   ListInvitationsResult['data']
 >[number]
 type Role = (typeof auth.client.$Infer.Invitation)['role']
-const members = ref<OrganizationMember[]>([])
-const invitations = ref<OrganizationInvitation[]>([])
 
-const membersLoading = ref(false)
-const invitationsLoading = ref(false)
-const membersError = ref<string | null>(null)
-const invitationsError = ref<string | null>(null)
+const { data: membersData, status: membersStatus, error: membersError, refresh: refreshMembers } = useAsyncData<{ members: OrganizationMember[] }>(
+  () => `members-${activeOrganization.value?.id ?? 'none'}`,
+  async () => {
+    if (!activeOrganization.value?.id) return { members: [] }
+    const { data, error } = await auth.client.organization.listMembers({
+      query: { organizationId: activeOrganization.value.id }
+    })
+    if (error) throw error
+    console.log(data.members);
+    return { members: (data.members as OrganizationMember[]) ?? [] }
+  },
+  {
+    watch: [() => activeOrganization.value?.id],
+  }
+)
+
+const members = computed(() => membersData.value?.members ?? [])
+const membersLoading = computed(() => membersStatus.value === 'pending')
+
+const { data: invitationsData, status: invitationsStatus, error: invitationsError, refresh: refreshInvitations } = useAsyncData<OrganizationInvitation[]>(
+  () => `invitations-${activeOrganization.value?.id ?? 'none'}`,
+  async () => {
+    console.log('hi', activeOrganization.value.id);
+    if (!activeOrganization.value?.id) return []
+    const { data, error } = await auth.client.organization.listInvitations({
+      query: { organizationId: activeOrganization.value.id }
+    })
+    if (error) throw error
+    return data ?? []
+  },
+  {
+    watch: [() => activeOrganization.value?.id],
+  }
+)
+
+const invitations = computed(() => invitationsData.value ?? [])
+const invitationsLoading = computed(() => invitationsStatus.value === 'pending')
+
 const activeTab = ref<'members' | 'invitations' | 'tags'>('members')
 
 const updatingMemberIds = ref(new Set<string>())
@@ -632,7 +664,6 @@ const resendingInvitationIds = ref(new Set<string>())
 const cancellingInvitationIds = ref(new Set<string>())
 const deletingTagIds = ref(new Set<string>())
 
-// Tags state
 type OrganizationTag = {
   id: string
   name: string
@@ -640,9 +671,24 @@ type OrganizationTag = {
   createdAt: Date | string
 }
 
-const organizationTags = ref<OrganizationTag[]>([])
-const tagsLoading = ref(false)
-const tagsError = ref<string | null>(null)
+const { data: tagsData, status: tagsStatus, error: tagsError, refresh: refreshTags } = useAsyncData<{ tags: OrganizationTag[] }>(
+  () => `tags-${activeOrganization.value?.id ?? 'none'}`,
+  async () => {
+    if (!activeOrganization.value?.id) return { tags: [] }
+    const data = await $fetch<{ tags: OrganizationTag[] }>('/api/tags')
+    return data
+  },
+  {
+    watch: [() => activeOrganization.value?.id],
+  }
+)
+
+const organizationTags = computed(() => tagsData.value?.tags ?? [])
+const tagsLoading = computed(() => tagsStatus.value === 'pending')
+
+const membersErrorMessage = computed(() => membersError.value ? String(membersError.value) : null)
+const invitationsErrorMessage = computed(() => invitationsError.value ? String(invitationsError.value) : null)
+const tagsErrorMessage = computed(() => tagsError.value ? String(tagsError.value) : null)
 
 const isTagSlideoverOpen = ref(false)
 
@@ -742,21 +788,7 @@ const canDeleteOrganization = computed(() => {
 const isDeletingOrganization = ref(false)
 
 const isRefreshing = computed(
-  () => membersLoading.value || invitationsLoading.value
-)
-
-watch(
-  () => activeOrganization.value?.id,
-  async (id) => {
-    if (!id) {
-      members.value = []
-      invitations.value = []
-      organizationTags.value = []
-      return
-    }
-    await Promise.all([refreshMembers(), refreshInvitations(), refreshTags()])
-  },
-  { immediate: true }
+  () => membersLoading.value || invitationsLoading.value || tagsLoading.value
 )
 
 function extractRoles(input: unknown): Role[] {
@@ -807,54 +839,6 @@ function extractErrorMessage(err: unknown) {
     )
   }
   return 'Something went wrong. Please try again.'
-}
-
-async function refreshMembers() {
-  if (!activeOrganization.value?.id) return
-  membersLoading.value = true
-  membersError.value = null
-  try {
-    const { data, error } = await auth.client.organization.listMembers({
-      query: { organizationId: activeOrganization.value.id }
-    })
-    if (error) throw error
-    members.value = (data.members as OrganizationMember[]) ?? []
-  } catch (err) {
-    membersError.value = extractErrorMessage(err)
-  } finally {
-    membersLoading.value = false
-  }
-}
-
-async function refreshInvitations() {
-  if (!activeOrganization.value?.id) return
-  invitationsLoading.value = true
-  invitationsError.value = null
-  try {
-    const { data, error } = await auth.client.organization.listInvitations({
-      query: { organizationId: activeOrganization.value.id }
-    })
-    if (error) throw error
-    invitations.value = data ?? []
-  } catch (err) {
-    invitationsError.value = extractErrorMessage(err)
-  } finally {
-    invitationsLoading.value = false
-  }
-}
-
-async function refreshTags() {
-  if (!activeOrganization.value?.id) return
-  tagsLoading.value = true
-  tagsError.value = null
-  try {
-    const data = (await $fetch('/api/tags')) as { tags: OrganizationTag[] }
-    organizationTags.value = data.tags ?? []
-  } catch (err) {
-    tagsError.value = extractErrorMessage(err)
-  } finally {
-    tagsLoading.value = false
-  }
 }
 
 async function refreshAll() {
@@ -908,7 +892,6 @@ async function handleInviteSubmit(event: FormSubmitEvent<InviteForm>) {
   }
 }
 
-// Small utility to keep per-entity loading state immutable for Vue reactivity.
 const loadingGuard = (set: Ref<Set<string>>) => ({
   add(id: string) {
     const next = new Set(set.value)
@@ -1083,7 +1066,6 @@ async function cancelInvitation(invitation: OrganizationInvitation) {
   }
 }
 
-// Tag management functions
 const tagLoading = loadingGuard(deletingTagIds)
 
 function isDeletingTag(tagId: string) {
