@@ -640,7 +640,6 @@ const membersLoading = computed(() => membersStatus.value === 'pending')
 const { data: invitationsData, status: invitationsStatus, error: invitationsError, refresh: refreshInvitations } = useAsyncData<OrganizationInvitation[]>(
   () => `invitations-${activeOrganization.value?.id ?? 'none'}`,
   async () => {
-    console.log('hi', activeOrganization.value.id);
     if (!activeOrganization.value?.id) return []
     const { data, error } = await auth.client.organization.listInvitations({
       query: { organizationId: activeOrganization.value.id }
