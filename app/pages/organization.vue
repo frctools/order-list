@@ -673,7 +673,7 @@ const { data: tagsData, status: tagsStatus, error: tagsError, refresh: refreshTa
   () => `tags-${activeOrganization.value?.id ?? 'none'}`,
   async () => {
     if (!activeOrganization.value?.id) return { tags: [] }
-    const data = await $fetch<{ tags: OrganizationTag[] }>('/api/tags')
+    const data = $fetch<{ tags: OrganizationTag[] }>('/api/tags')
     return data
   },
   {

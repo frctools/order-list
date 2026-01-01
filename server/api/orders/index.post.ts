@@ -1,83 +1,84 @@
-import { defineEventHandler, readBody, createError } from 'h3'
-import { z } from 'zod'
-import { useDB } from '../../utils/db'
-import { orders, vendors, orderTags, tags } from '../../utils/schema'
-import { user as authUser } from '../../utils/auth-schema'
-import { requireOrganizationContext } from '../../utils/session'
-import { eq, sql, and, inArray } from 'drizzle-orm'
+import { defineEventHandler, readBody, createError } from "h3";
+import { z } from "zod";
+import { useDB } from "../../utils/db";
+import { orders, vendors, orderTags, tags } from "../../utils/schema";
+import { user as authUser } from "../../utils/auth-schema";
+import { requireOrganizationContext } from "../../utils/session";
+import { eq, sql, and, inArray } from "drizzle-orm";
+import { notificationHelpers } from "../../utils/notification-helpers";
 
 const createOrderSchema = z.object({
-  partName: z.string().min(1, 'Part name is required'),
+  partName: z.string().min(1, "Part name is required"),
   description: z.string().trim().optional(),
   quantity: z.coerce.number().int().min(1).default(1),
   vendorId: z
     .union([z.string(), z.null(), z.undefined()])
     .transform((value) => {
-      if (value === undefined || value === null) return null
-      const trimmed = value.trim()
-      return trimmed.length > 0 ? trimmed : null
+      if (value === undefined || value === null) return null;
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : null;
     }),
   unitPriceCents: z
     .union([
-      z.coerce.number().int().min(0, 'Price must be zero or more'),
-      z.literal('')
+      z.coerce.number().int().min(0, "Price must be zero or more"),
+      z.literal(""),
     ])
     .optional()
-    .transform(value => (typeof value === 'number' ? value : undefined)),
+    .transform((value) => (typeof value === "number" ? value : undefined)),
   variantId: z
     .string()
     .trim()
     .optional()
-    .transform(value => (value ? value : undefined)),
+    .transform((value) => (value ? value : undefined)),
   variantTitle: z
     .string()
     .trim()
     .optional()
-    .transform(value => (value ? value : undefined)),
+    .transform((value) => (value ? value : undefined)),
   externalUrl: z
     .string()
     .trim()
-    .url('Enter a valid URL')
+    .url("Enter a valid URL")
     .optional()
-    .or(z.literal(''))
-    .transform(value => (value ? value : null)),
-  tagIds: z.array(z.string()).optional().default([])
-})
+    .or(z.literal(""))
+    .transform((value) => (value ? value : null)),
+  tagIds: z.array(z.string()).optional().default([]),
+});
 
 export default defineEventHandler(async (event) => {
-  const { organizationId, user } = await requireOrganizationContext(event)
-  const db = useDB()
-  const rawBody = await readBody(event)
-  const parsed = createOrderSchema.safeParse(rawBody)
+  const { organizationId, user } = await requireOrganizationContext(event);
+  const db = useDB();
+  const rawBody = await readBody(event);
+  const parsed = createOrderSchema.safeParse(rawBody);
 
   if (!parsed.success) {
     throw createError({
       statusCode: 400,
       statusMessage:
-        parsed.error.flatten().formErrors.join(', ') || 'Invalid payload',
-      data: parsed.error.flatten().fieldErrors
-    })
+        parsed.error.flatten().formErrors.join(", ") || "Invalid payload",
+      data: parsed.error.flatten().fieldErrors,
+    });
   }
 
-  const payload = parsed.data
-  const vendorInput = payload.vendorId
-  let vendorId: string | null = null
-  let vendorName: string | null = null
+  const payload = parsed.data;
+  const vendorInput = payload.vendorId;
+  let vendorId: string | null = null;
+  let vendorName: string | null = null;
 
   if (vendorInput) {
     const vendorRecord = await db.query.vendors.findFirst({
-      where: eq(vendors.id, vendorInput)
-    })
+      where: eq(vendors.id, vendorInput),
+    });
 
     if (vendorRecord) {
-      vendorId = vendorRecord.id
-      vendorName = null
+      vendorId = vendorRecord.id;
+      vendorName = null;
     } else {
-      vendorName = vendorInput
+      vendorName = vendorInput;
     }
   }
 
-  const orderId = crypto.randomUUID()
+  const orderId = crypto.randomUUID();
 
   await db.insert(orders).values({
     id: orderId,
@@ -87,10 +88,10 @@ export default defineEventHandler(async (event) => {
       payload.description && payload.description.length > 0
         ? payload.description
         : null,
-    status: 'to_order',
+    status: "to_order",
     quantity: payload.quantity,
     unitPriceCents:
-      typeof payload.unitPriceCents === 'number'
+      typeof payload.unitPriceCents === "number"
         ? payload.unitPriceCents
         : null,
     variantId: payload.variantId ?? null,
@@ -98,8 +99,8 @@ export default defineEventHandler(async (event) => {
     vendorId,
     vendorName,
     externalUrl: payload.externalUrl ?? null,
-    requestedBy: user.id
-  })
+    requestedBy: user.id,
+  });
 
   if (payload.tagIds.length > 0) {
     const validTags = await db
@@ -108,18 +109,18 @@ export default defineEventHandler(async (event) => {
       .where(
         and(
           eq(tags.organizationId, organizationId),
-          inArray(tags.id, payload.tagIds)
-        )
-      )
+          inArray(tags.id, payload.tagIds),
+        ),
+      );
 
-    const validTagIds = validTags.map(t => t.id)
+    const validTagIds = validTags.map((t) => t.id);
     if (validTagIds.length > 0) {
       await db.insert(orderTags).values(
-        validTagIds.map(tagId => ({
+        validTagIds.map((tagId) => ({
           orderId,
-          tagId
-        }))
-      )
+          tagId,
+        })),
+      );
     }
   }
 
@@ -127,11 +128,11 @@ export default defineEventHandler(async (event) => {
     .select({
       tagId: tags.id,
       tagName: tags.name,
-      tagColor: tags.color
+      tagColor: tags.color,
     })
     .from(orderTags)
     .innerJoin(tags, eq(orderTags.tagId, tags.id))
-    .where(eq(orderTags.orderId, orderId))
+    .where(eq(orderTags.orderId, orderId));
 
   const [createdOrder] = await db
     .select({
@@ -155,21 +156,33 @@ export default defineEventHandler(async (event) => {
       requestedBy: orders.requestedBy,
       requestedByName: authUser.name,
       createdAt: orders.createdAt,
-      updatedAt: orders.updatedAt
+      updatedAt: orders.updatedAt,
     })
     .from(orders)
     .leftJoin(vendors, eq(orders.vendorId, vendors.id))
     .leftJoin(authUser, eq(orders.requestedBy, authUser.id))
-    .where(eq(orders.id, orderId))
+    .where(eq(orders.id, orderId));
+
+  notificationHelpers
+    .notifyOrderCreated(
+      organizationId,
+      orderId,
+      payload.partName,
+      payload.description,
+      user.id,
+    )
+    .catch((err) =>
+      console.error("Failed to send order creation notifications:", err),
+    );
 
   return {
     order: {
       ...createdOrder,
-      tags: orderTagsData.map(t => ({
+      tags: orderTagsData.map((t) => ({
         id: t.tagId,
         name: t.tagName,
-        color: t.tagColor
-      }))
-    }
-  }
-})
+        color: t.tagColor,
+      })),
+    },
+  };
+});

@@ -4,7 +4,9 @@ import {
   text,
   timestamp,
   integer,
-  primaryKey
+  primaryKey,
+  index,
+  boolean
 } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { organization, user } from './auth-schema'
@@ -112,3 +114,84 @@ export const productCacheRelations = relations(productCache, ({ one }) => ({
     references: [vendors.id]
   })
 }))
+
+export const notificationPreferences = pgTable(
+  "notification_preferences",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    orderCreated: boolean("order_created").default(true).notNull(),
+    orderStatusChanged: boolean("order_status_changed").default(true).notNull(),
+    orderDeleted: boolean("order_deleted").default(false).notNull(),
+    dailyDigest: boolean("daily_digest").default(false).notNull(),
+    digestTime: text("digest_time").default("09:00").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("notification_preferences_userId_idx").on(table.userId),
+    index("notification_preferences_organizationId_idx").on(
+      table.organizationId,
+    ),
+  ],
+);
+
+export const notificationLog = pgTable(
+  "notification_log",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    type: text("type").notNull(), 
+    subject: text("subject").notNull(),
+    recipientEmail: text("recipient_email").notNull(),
+    status: text("status").default("sent").notNull(), 
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("notification_log_userId_idx").on(table.userId),
+    index("notification_log_organizationId_idx").on(table.organizationId),
+    index("notification_log_type_idx").on(table.type),
+    index("notification_log_createdAt_idx").on(table.createdAt),
+  ],
+);
+
+export const notificationPreferencesRelations = relations(
+  notificationPreferences,
+  ({ one }) => ({
+    user: one(user, {
+      fields: [notificationPreferences.userId],
+      references: [user.id],
+    }),
+    organization: one(organization, {
+      fields: [notificationPreferences.organizationId],
+      references: [organization.id],
+    }),
+  }),
+);
+
+export const notificationLogRelations = relations(
+  notificationLog,
+  ({ one }) => ({
+    user: one(user, {
+      fields: [notificationLog.userId],
+      references: [user.id],
+    }),
+    organization: one(organization, {
+      fields: [notificationLog.organizationId],
+      references: [organization.id],
+    }),
+  }),
+);

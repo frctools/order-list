@@ -32,10 +32,7 @@
           <span class="hidden md:inline text-sm font-medium">
             {{ user.name ?? user.email }}
           </span>
-          <UIcon
-            name="i-heroicons-chevron-down-20-solid"
-            class="h-4 w-4"
-          />
+          <UIcon name="i-heroicons-chevron-down-20-solid" class="h-4 w-4" />
         </UButton>
       </UDropdownMenu>
     </template>
@@ -43,48 +40,55 @@
 </template>
 
 <script setup lang="ts">
-const auth = useAuth()
-const toast = useToast()
+const auth = useAuth();
+const toast = useToast();
 
-const pending = ref(false)
-const user = computed(() => auth.user.value)
+const pending = ref(false);
+const user = computed(() => auth.user.value);
 
 const avatarFallback = computed(() => {
-  const source = user.value?.name || user.value?.email || ''
-  return source.slice(0, 2).toUpperCase()
-})
+  const source = user.value?.name || user.value?.email || "";
+  return source.slice(0, 2).toUpperCase();
+});
 
 async function handleSignOut() {
-  if (pending.value) return
+  if (pending.value) return;
   try {
-    pending.value = true
-    await auth.signOut()
-    await refreshNuxtData()
-    toast.add({ title: 'Signed out' })
-    await navigateTo('/auth/login')
+    pending.value = true;
+    await auth.signOut();
+    await refreshNuxtData();
+    toast.add({ title: "Signed out" });
+    await navigateTo("/auth/login");
   } catch (error) {
-    console.error(error)
-    toast.add({ title: 'Unable to sign out' })
+    console.error(error);
+    toast.add({ title: "Unable to sign out" });
   } finally {
-    pending.value = false
+    pending.value = false;
   }
 }
 
 const dropdownItems = computed(() => [
   [
     {
-      label: 'Dashboard',
-      to: '/app',
-      icon: 'i-heroicons-home'
-    }
+      label: "Dashboard",
+      to: "/app",
+      icon: "i-heroicons-home",
+    },
   ],
   [
     {
-      label: pending.value ? 'Signing out…' : 'Sign out',
-      icon: 'i-heroicons-arrow-left-on-rectangle',
+      label: "Settings",
+      to: "/settings",
+      icon: "i-heroicons-cog-6-tooth",
+    },
+  ],
+  [
+    {
+      label: pending.value ? "Signing out…" : "Sign out",
+      icon: "i-heroicons-arrow-left-on-rectangle",
       disabled: pending.value,
-      onClick: handleSignOut
-    }
-  ]
-])
+      onClick: handleSignOut,
+    },
+  ],
+]);
 </script>
