@@ -59,7 +59,10 @@ const updateOrderSchema = z
       .optional()
       .or(z.literal(""))
       .or(z.null())
-      .transform((value) => (value ? value : null)),
+      .transform((value) => {
+        if (value === undefined) return undefined;
+        return value ? value : null;
+      }),
     tagIds: z.array(z.string()).optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {

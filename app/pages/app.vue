@@ -862,13 +862,10 @@ function openEditEditor(order: Order) {
   isEditorOpen.value = true
 }
 
-// Handle 'add' query parameter to open editor with pre-filled URL
 onMounted(() => {
   const addUrl = route.query.add
   if (addUrl && typeof addUrl === 'string') {
-    // Clear the query parameter from URL
     router.replace({ query: { ...route.query, add: undefined } })
-    // Open editor with the URL
     openCreateEditor(addUrl)
   }
 })

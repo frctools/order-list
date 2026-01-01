@@ -29,7 +29,6 @@ interface NotificationLog {
 export const useNotifications = () => {
   const queryClient = useQueryClient();
 
-  // Fetch notification preferences
   const {
     data: preferences,
     isLoading: preferencesLoading,
@@ -43,7 +42,6 @@ export const useNotifications = () => {
     },
   });
 
-  // Fetch notification log
   const {
     data: logData,
     isLoading: logLoading,
@@ -61,7 +59,6 @@ export const useNotifications = () => {
     },
   });
 
-  // Update preferences mutation
   const { mutate: updatePreferences, isPending: isUpdating } = useMutation({
     mutationFn: async (updates: Partial<NotificationPreferences>) => {
       const response = await fetch("/api/notifications/preferences", {
@@ -78,14 +75,12 @@ export const useNotifications = () => {
   });
 
   return {
-    // Preferences
     preferences: computed(() => preferences.value),
     preferencesLoading,
     preferencesError,
     updatePreferences,
     isUpdating,
 
-    // Notification Log
     logs: computed(() => logData.value?.logs || []),
     logTotal: computed(() => logData.value?.total || 0),
     logLoading,

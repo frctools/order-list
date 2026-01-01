@@ -84,7 +84,6 @@ export const emailService = {
         }
       > = [];
 
-      // Prepare and filter based on preferences
       for (const options of optionsList) {
         const notificationType = options.notificationType as NotificationType;
 

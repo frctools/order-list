@@ -16,7 +16,7 @@
     "@iconify-json/lucide": "^1.2.82",
     "@iconify-json/simple-icons": "^1.2.64",
     "@nuxt/content": "^3.10.0",
-    "@nuxt/ui": "^4.3.0",
+    "@nuxt/ui": "v4.2.1",
     "@nuxtjs/mdc": "^0.18.4",
     "@nuxtjs/plausible": "2.0.1",
     "@react-email/render": "^2.0.1",
