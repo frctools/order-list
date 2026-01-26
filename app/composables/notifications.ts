@@ -58,7 +58,7 @@ export const useNotifications = () => {
       };
     },
   });
-
+  // mutation to update preferences
   const { mutate: updatePreferences, isPending: isUpdating } = useMutation({
     mutationFn: async (updates: Partial<NotificationPreferences>) => {
       const response = await fetch("/api/notifications/preferences", {

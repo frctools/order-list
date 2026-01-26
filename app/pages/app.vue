@@ -517,8 +517,8 @@
                 variant="ghost"
                 color="error"
                 icon="i-lucide-trash-2"
-                :loading="isOrderDeleting(row.id)"
-                @click="deleteOrder(row)"
+                :loading="isOrderDeleting(row.original.id)"
+                @click="deleteOrder(row.original)"
               >
                 Remove
               </UButton>
