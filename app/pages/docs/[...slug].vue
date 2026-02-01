@@ -2,7 +2,6 @@
 import type { ContentNavigationItem } from '@nuxt/content'
 import { findPageHeadline } from '@nuxt/content/utils'
 import { Doc } from 'better-auth'
-import {ContentDocsOnshapeBOMTool} from '#components'
 
 definePageMeta({
   layout: 'docs'
@@ -47,9 +46,6 @@ const links = computed(
       target: link.target
     })) || []
 )
-const components = {
-  'bom-tool': ContentDocsOnshapeBOMTool
-}
 </script>
 
 <template>
@@ -65,7 +61,6 @@ const components = {
       <ContentRenderer
         v-if="page"
         :value="page"
-        :components="components"
       />
 
       <USeparator v-if="surround?.length" />

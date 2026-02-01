@@ -405,7 +405,7 @@ async function handleImport() {
   isSubmitting.value = true;
   const res = await $fetch("/api/orders/bulk", {
     method: "POST",
-    body: {orders: importedOrders.value},
+    body: { orders: importedOrders.value },
   });
 
   if (importedOrders.value.length > 0) {
@@ -414,7 +414,7 @@ async function handleImport() {
       color: "success",
       icon: "i-lucide-check-circle",
     });
-  } 
+  }
 
   isSubmitting.value = false;
   emit("close", null);
