@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { ContentNavigationItem } from '@nuxt/content'
 import { findPageHeadline } from '@nuxt/content/utils'
+import { Doc } from 'better-auth'
+import {ContentDocsOnshapeBOMTool} from '#components'
 
 definePageMeta({
   layout: 'docs'
@@ -9,7 +11,6 @@ definePageMeta({
 const route = useRoute()
 const { toc } = useAppConfig()
 
-// From docs layout
 const navigation = inject<Ref<ContentNavigationItem[]>>('navigation')
 
 const { data: page } = await useAsyncData(route.path, () =>
@@ -46,6 +47,9 @@ const links = computed(
       target: link.target
     })) || []
 )
+const components = {
+  'bom-tool': ContentDocsOnshapeBOMTool
+}
 </script>
 
 <template>
@@ -61,6 +65,7 @@ const links = computed(
       <ContentRenderer
         v-if="page"
         :value="page"
+        :components="components"
       />
 
       <USeparator v-if="surround?.length" />

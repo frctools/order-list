@@ -13,10 +13,10 @@ import {
 } from "@vue-email/components";
 
 defineProps<{
-  userName: String;
-  memberName: String;
-  organizationName: String;
-  memberRole?: String;
+  userName: string;
+  memberName: string;
+  organizationName: string;
+  memberRole?: string;
 }>();
 
 const main = {
