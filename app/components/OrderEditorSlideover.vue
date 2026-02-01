@@ -283,6 +283,7 @@ const formState = reactive({
 })
 
 const isLookingUpVendor = ref(false)
+const skipNextVendorLookup = ref(false)
 
 const variantOptions = ref<VariantOption[]>([])
 
@@ -330,7 +331,7 @@ watch(
     )
     if (!option) return
     formState.variantTitle = option.title
-    if (option.price) {
+    if (option.price != null) {
       formState.unitPrice = option.price
     }
   }
@@ -342,6 +343,11 @@ watchEffect((onCleanup) => {
   if (!externalUrl) {
     variantOptions.value = []
     isLookingUpVendor.value = false
+    return
+  }
+
+  if (skipNextVendorLookup.value) {
+    skipNextVendorLookup.value = false
     return
   }
 
@@ -395,7 +401,7 @@ watchEffect((onCleanup) => {
         if (existing) {
           formState.variantId = existing.value
           formState.variantTitle = existing.title
-          if (existing.price) {
+          if (existing.price != null) {
             formState.unitPrice = existing.price
           }
         }
@@ -418,6 +424,7 @@ watchEffect((onCleanup) => {
 
 function initializeFormState() {
   if (props.mode === 'edit' && props.initialOrder) {
+    skipNextVendorLookup.value = true
     formState.externalUrl = props.initialOrder.externalUrl ?? ''
     formState.partName = props.initialOrder.partName
     formState.quantity = props.initialOrder.quantity
@@ -461,7 +468,7 @@ function handleSubmit(event: FormSubmitEvent<OrderFormSchema>) {
     quantity: event.data.quantity,
     description: event.data.description ?? undefined,
     vendorId: event.data.vendorId ?? null,
-    unitPriceCents: event.data.unitPrice
+    unitPriceCents: event.data.unitPrice != null
       ? Math.ceil(Number(event.data.unitPrice) * 100)
       : undefined,
     variantId: event.data.variantId ?? undefined,
@@ -478,7 +485,7 @@ function handleSubmit(event: FormSubmitEvent<OrderFormSchema>) {
 }
 
 function formatVariantPriceLabel(price?: string | null) {
-  if (!price) return null
+  if (price == null) return null
   const numeric = Number(price)
   if (Number.isNaN(numeric)) return price
   try {
