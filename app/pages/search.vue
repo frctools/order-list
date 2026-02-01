@@ -37,21 +37,40 @@ interface SearchResultItem {
   originalUrl: string;
 }
 
-interface SearchResponse {
-  hits: SearchResultItem[];
+interface FacetHit {
+  value: string;
+  count: number;
 }
 
+interface SearchResponse {
+  hits: SearchResultItem[];
+  estimatedTotalHits?: number;
+}
+
+// Fetch available vendors from facets endpoint
+const { data: vendorFacets } = await useFetch<FacetHit[]>(
+  "/api/vendors/facets",
+  {
+    query: { facet: "vendorName" },
+    lazy: true,
+  },
+);
+
+// Pass filter and sort parameters to the server
 const { data: searchData, status } = await useFetch<SearchResponse>(
   "/api/vendors/search",
   {
     query: {
       q: debouncedSearch,
-      limit: 20,
+      limit: 100,
+      vendors: selectedVendors,
+      sort: sortBy,
     },
     lazy: true,
   },
 );
 
+// Results are already filtered and sorted by the server
 const searchResults = computed((): SearchResultItem[] => {
   if (!searchData.value?.hits) return [];
   return searchData.value.hits.map((item) => ({
@@ -67,30 +86,15 @@ const searchResults = computed((): SearchResultItem[] => {
   }));
 });
 
+// Available vendors come from facets endpoint (includes counts)
 const availableVendors = computed(() => {
-  const vendors = new Set<string>();
-  searchResults.value?.forEach((item) => {
-    if (item.vendorName) vendors.add(item.vendorName);
-  });
-  return Array.from(vendors).map((v) => ({ label: v, value: v }));
-});
-
-const filteredResults = computed(() => {
-  let results = searchResults.value || [];
-
-  if (selectedVendors.value.length > 0) {
-    results = results.filter((item) =>
-      selectedVendors.value.includes(item.vendorName),
-    );
-  }
-
-  if (sortBy.value === "price-asc") {
-    results = [...results].sort((a, b) => (a.price || 0) - (b.price || 0));
-  } else if (sortBy.value === "price-desc") {
-    results = [...results].sort((a, b) => (b.price || 0) - (a.price || 0));
-  }
-
-  return results;
+  if (!vendorFacets.value) return [];
+  return vendorFacets.value
+    .sort((a, b) => b.count - a.count) // Sort by count descending
+    .map((facet) => ({
+      label: `${facet.value} (${facet.count})`,
+      value: facet.value,
+    }));
 });
 
 const sortOptions = [
@@ -185,11 +189,11 @@ function getAddToOrderUrl(originalUrl: string) {
       </div>
 
       <p
-        v-if="debouncedSearch && filteredResults.length > 0"
+        v-if="debouncedSearch && searchResults.length > 0"
         class="text-sm text-muted mb-4"
       >
-        {{ filteredResults.length }} result{{
-          filteredResults.length !== 1 ? "s" : ""
+        {{ searchResults.length }} result{{
+          searchResults.length !== 1 ? "s" : ""
         }}
         for "{{ debouncedSearch }}"
       </p>
@@ -216,7 +220,7 @@ function getAddToOrderUrl(originalUrl: string) {
       </UPageCard>
 
       <UPageCard
-        v-else-if="filteredResults.length === 0"
+        v-else-if="searchResults.length === 0"
         class="text-center py-12"
       >
         <UIcon
@@ -232,7 +236,7 @@ function getAddToOrderUrl(originalUrl: string) {
         class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
       >
         <UPageCard
-          v-for="item in filteredResults"
+          v-for="item in searchResults"
           :key="item.id"
           class="flex flex-col"
         >
@@ -243,7 +247,7 @@ function getAddToOrderUrl(originalUrl: string) {
               v-if="item.image"
               :src="item.image"
               :alt="item.title"
-              class="w-full max-w-64 h-auto object-contain"
+              class="w-full max-w-full h-auto object-contain"
             />
             <div v-else class="w-full h-full flex items-center justify-center">
               <UIcon name="i-lucide-package" class="w-12 h-12 text-muted" />
@@ -302,7 +306,7 @@ function getAddToOrderUrl(originalUrl: string) {
 
       <div v-else class="space-y-3">
         <UPageCard
-          v-for="item in filteredResults"
+          v-for="item in searchResults"
           :key="item.id"
           class="flex gap-4"
         >

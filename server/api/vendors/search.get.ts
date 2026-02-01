@@ -1,16 +1,21 @@
 import { MeiliSearch } from 'meilisearch'
+import { z } from 'zod'
 
 export default defineEventHandler(async (event) => {
-  const query = getQuery(event)
-  const searchTerm = query.q as string
-  const limit = Math.min(Math.max(Number(query.limit) || 5, 1), 100)
-  if (!searchTerm) {
-    return {
-      hits: [],
-      processingTimeMs: 0,
-      query: ''
-    }
-  }
+  const query = await getValidatedQuery(event, (data) => {
+    return z
+      .object({
+        q: z.string().default(''),
+        limit: z.coerce.number().min(1).max(100).default(20),
+        sort: z.enum(['relevance', 'price-asc', 'price-desc']).default('relevance'),
+        vendors: z.union([z.string(), z.array(z.string())]).optional().transform((val) => {
+          if (!val) return []
+          return Array.isArray(val) ? val : [val]
+        }),
+      })
+      .parse(data)
+  })
+
   const meiliHost = process.env.MEILISEARCH_HOST
   const meiliKey = process.env.MEILISEARCH_API_KEY
   const indexName = process.env.MEILISEARCH_INDEX || 'products'
@@ -28,8 +33,34 @@ export default defineEventHandler(async (event) => {
   })
 
   const index = client.index(indexName)
-  const searchResults = await index.search(searchTerm, {
-    limit,
+
+  let filter: string | undefined
+  if (query.vendors.length > 0) {
+    filter = query.vendors
+      .map(v => `vendorName = '${v.replace(/'/g, "\\'")}'`)
+      .join(' OR ')
+  }
+
+  let sort: string[] | undefined
+  if (query.sort === 'price-asc') {
+    sort = ['price:asc']
+  } else if (query.sort === 'price-desc') {
+    sort = ['price:desc']
+  }
+
+  if (query.q === '') {
+    return {
+      hits: [],
+      processingTimeMs: 0,
+      query: '',
+      estimatedTotalHits: 0
+    }
+  }
+
+  const searchResults = await index.search(query.q, {
+    limit: query.limit,
+    filter,
+    sort,
     hybrid: {
       embedder: 'default',
       semanticRatio: 0.5
@@ -39,6 +70,7 @@ export default defineEventHandler(async (event) => {
   return {
     hits: searchResults.hits,
     processingTimeMs: searchResults.processingTimeMs,
-    query: searchResults.query
+    query: searchResults.query,
+    estimatedTotalHits: searchResults.estimatedTotalHits
   }
 })
