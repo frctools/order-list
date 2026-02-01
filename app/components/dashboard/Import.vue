@@ -428,10 +428,20 @@ async function handleImport() {
     fullscreen
   >
     <template #body>
+      <ProseCallout
+        type="tip"
+        icon="i-lucide-file-spreadsheet"
+        to="/docs/features/import"
+        @click="emit('close', null)"
+      >
+        Learn how to export your BOM from Onshape and import it here.
+      </ProseCallout>
+
       <UFileUpload
         v-model="value"
         description="Upload a CSV with columns: Part Number, Quantity, Description"
         :disabled="isSubmitting"
+        class="mt-4"
       />
 
       <div v-if="isSearching" class="mt-4 flex items-center gap-2">
