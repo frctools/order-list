@@ -1,32 +1,34 @@
-import { MeiliSearch } from 'meilisearch'
-import { z } from 'zod'
+import { MeiliSearch } from "meilisearch";
+import { z } from "zod";
 
 export default defineEventHandler(async (event) => {
   const query = await getValidatedQuery(event, (data) => {
     return z
       .object({
-        facet: z.string().default('vendorName'),
+        facet: z.string().default("vendorName"),
       })
-      .parse(data)
-  })
+      .parse(data);
+  });
 
-  const meiliHost = process.env.MEILISEARCH_HOST
-  const meiliKey = process.env.MEILISEARCH_API_KEY
-  const indexName = process.env.MEILISEARCH_INDEX || 'products'
+  const meiliHost = process.env.MEILISEARCH_HOST;
+  const meiliKey = process.env.MEILISEARCH_API_KEY;
+  const indexName = process.env.MEILISEARCH_INDEX || "products";
 
   if (!meiliHost) {
     throw createError({
       statusCode: 500,
-      statusMessage: 'MEILISEARCH_HOST is not configured'
-    })
+      statusMessage: "MEILISEARCH_HOST is not configured",
+    });
   }
 
   const client = new MeiliSearch({
     host: meiliHost,
-    apiKey: meiliKey
-  })
+    apiKey: meiliKey,
+  });
 
-  const index = client.index(indexName)
-  const { facetHits } = await index.searchForFacetValues({ facetName: query.facet })
-  return facetHits
-})
+  const index = client.index(indexName);
+  const { facetHits } = await index.searchForFacetValues({
+    facetName: query.facet,
+  });
+  return facetHits;
+});

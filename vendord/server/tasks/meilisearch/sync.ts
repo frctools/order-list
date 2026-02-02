@@ -126,7 +126,12 @@ export default defineTask({
 
     await index.updateSettings({
       searchableAttributes: ["title", "description", "vendorName", "skus"],
-      filterableAttributes: ["vendorId", "vendorName", "vendorType", "currency"],
+      filterableAttributes: [
+        "vendorId",
+        "vendorName",
+        "vendorType",
+        "currency",
+      ],
       sortableAttributes: ["price", "updatedAt", "title"],
     });
 
