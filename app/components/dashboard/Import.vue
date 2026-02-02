@@ -157,13 +157,18 @@ function getRowState(key: string, defaultQuantity: number): RowState {
   };
 }
 
+function getDefaultQuantityForKey(key: string): number {
+  const part = list.value.find((p) => rowKey(p) === key);
+  return part?.quantity ?? 1;
+}
+
 function updateRowState(key: string, updates: Partial<RowState>) {
   const current = rowStates.value.get(key) || {
     selectedHit: null,
     variantId: "",
     variantTitle: "",
     unitPrice: null,
-    quantity: 1,
+    quantity: getDefaultQuantityForKey(key),
   };
   const newStates = new Map(rowStates.value);
   newStates.set(key, { ...current, ...updates });
