@@ -70,6 +70,15 @@ useSeoMeta({
           Documentation
         </UButton>
         <UButton
+          to="https://www.buymeacoffee.com/grahamsh"
+          target="_blank"
+          icon="i-lucide-heart"
+          aria-label="Donate"
+          class="text-pink-500"
+          variant="ghost"
+          label="Support Development"
+        />
+        <UButton
           to="https://github.com/frctools/order-list"
           target="_blank"
           icon="i-simple-icons-github"
