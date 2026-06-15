@@ -8,6 +8,10 @@ interface NotificationPreferences {
   orderCreated: boolean;
   orderStatusChanged: boolean;
   orderDeleted: boolean;
+  invitationReceived: boolean;
+  memberJoined: boolean;
+  tagCreated: boolean;
+  tagModified: boolean;
   dailyDigest: boolean;
   digestTime: string;
   createdAt: string;

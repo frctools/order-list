@@ -74,6 +74,11 @@ const dropdownItems = computed(() => [
       to: "/app",
       icon: "i-heroicons-home",
     },
+    {
+      label: "My Kits",
+      to: "/app/kits",
+      icon: "i-lucide-package",
+    },
   ],
   [
     {

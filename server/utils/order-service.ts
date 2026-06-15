@@ -160,6 +160,10 @@ async function fetchOrderWithDetails(
     .leftJoin(authUser, eq(orders.requestedBy, authUser.id))
     .where(eq(orders.id, orderId));
 
+  if (!createdOrder) {
+    throw new Error(`Order ${orderId} was not found after creation`);
+  }
+
   return {
     ...createdOrder,
     tags: orderTagsData.map((t) => ({

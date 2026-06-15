@@ -105,13 +105,22 @@ const digestTime = computed({
 const digestTimeFormatted = computed(() => {
   if (!preferences.value?.digestTime) return "not set";
   const [hours, minutes] = preferences.value.digestTime.split(":");
-  const hour = parseInt(hours);
+  const hour = Number.parseInt(hours ?? "0", 10);
   const ampm = hour >= 12 ? "PM" : "AM";
   const displayHour = hour % 12 || 12;
-  return `${displayHour}:${minutes} ${ampm}`;
+  return `${displayHour}:${minutes ?? "00"} ${ampm}`;
 });
 
-const updatePreference = async (key: string, value: any) => {
+type NotificationPreferenceKey =
+  | "orderCreated"
+  | "orderStatusChanged"
+  | "orderDeleted"
+  | "dailyDigest";
+
+const updatePreference = async (
+  key: NotificationPreferenceKey,
+  value: boolean,
+) => {
   await updatePreferences({ [key]: value });
 };
 

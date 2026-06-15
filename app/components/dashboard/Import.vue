@@ -13,13 +13,16 @@ const toast = useToast();
 
 interface SearchHit {
   name: string;
+  title?: string;
   description?: string;
   url?: string;
   originalUrl?: string;
   sku?: string;
+  skus?: string[];
   vendor?: string;
+  image?: string;
   price?: number;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface VendorProductResponse {
@@ -63,8 +66,14 @@ interface ImportRow {
   state: RowState;
 }
 
+interface ProductMenuItem {
+  label: string;
+  description: string;
+  value: SearchHit;
+}
+
 const parseCSV = (file: File) => {
-  return new Promise((resolve, reject) => {
+  return new Promise<unknown[]>((resolve, reject) => {
     parse(file, {
       header: true,
       skipEmptyLines: true,
@@ -93,14 +102,14 @@ const csvSchema = z.object({
 const rawList = computedAsync(async () => {
   if (!value.value) return [];
   const parsed = await parseCSV(value.value);
-  return parsed as any[];
+  return parsed;
 });
 
 const list = computed(() => {
   if (!rawList.value || rawList.value.length === 0) return [];
 
   const validRows = rawList.value
-    .map((part: any) => {
+    .map((part) => {
       const parsed = csvSchema.safeParse(part);
       if (!parsed.success) return null;
       const { partNumber, description, quantity } = parsed.data;
@@ -111,11 +120,11 @@ const list = computed(() => {
         quantity,
       };
     })
-    .filter(Boolean) as {
+    .filter((row): row is {
     partNumber: string;
     description: string;
     quantity: number;
-  }[];
+  } => Boolean(row));
 
   const combined = new Map<
     string,
@@ -266,13 +275,40 @@ function deleteRow(key: string) {
   deletedKeys.value = new Set([...deletedKeys.value, key]);
 }
 
-function getInputMenuItems(key: string) {
+function getInputMenuItems(key: string): ProductMenuItem[] {
   const hits = lookedUpParts.value.get(key) || [];
-  return hits.map((hit) => ({
-    label: hit.title,
-    description: hit.skus ? `SKU: ${hit.skus[0]}` : hit.vendor || "",
-    value: hit,
-  }));
+  return hits.map((hit) => {
+    const sku = hit.skus?.[0] ?? hit.sku;
+    return {
+      label: hit.title || hit.name || "Untitled product",
+      description: sku ? `SKU: ${sku}` : hit.vendor || "",
+      value: hit,
+    };
+  });
+}
+
+function getProductMenuItem(item: unknown): ProductMenuItem | null {
+  if (!item || typeof item !== "object") return null;
+  const candidate = item as Partial<ProductMenuItem>;
+  return candidate.value && typeof candidate.label === "string"
+    ? (candidate as ProductMenuItem)
+    : null;
+}
+
+function getSelectedHit(item: unknown): SearchHit | null {
+  return getProductMenuItem(item)?.value ?? null;
+}
+
+function getMenuItemImage(item: unknown) {
+  return getProductMenuItem(item)?.value.image ?? "";
+}
+
+function getMenuItemLabel(item: unknown) {
+  return getProductMenuItem(item)?.label ?? "";
+}
+
+function getMenuItemDescription(item: unknown) {
+  return getProductMenuItem(item)?.description ?? "";
 }
 
 function getVariantOptions(key: string): VariantOption[] {
@@ -408,7 +444,7 @@ async function handleImport() {
   if (importedOrders.value.length === 0) return;
 
   isSubmitting.value = true;
-  const res = await $fetch("/api/orders/bulk", {
+  await $fetch("/api/orders/bulk", {
     method: "POST",
     body: { orders: importedOrders.value },
   });
@@ -495,24 +531,26 @@ async function handleImport() {
               class="w-64"
               :loading="isSearching"
               ignore-filter
-              @update:model-value="selectHit(row.original.key, $event)"
+              @update:model-value="
+                selectHit(row.original.key, getSelectedHit($event))
+              "
             >
               <template #item="{ item }">
                 <div class="flex gap-2 items-center">
                   <img
-                    v-if="item.value.image"
-                    :src="item.value.image"
+                    v-if="getMenuItemImage(item)"
+                    :src="getMenuItemImage(item)"
                     alt=""
                     class="h-6 w-6 object-contain rounded-md"
                   />
                   <div class="flex flex-col py-1">
                     <span class="font-medium text-sm truncate">{{
-                      item.label
+                      getMenuItemLabel(item)
                     }}</span>
                     <span
-                      v-if="item.description"
+                      v-if="getMenuItemDescription(item)"
                       class="text-xs text-gray-500 truncate"
-                      >{{ item.description }}</span
+                      >{{ getMenuItemDescription(item) }}</span
                     >
                   </div>
                 </div>

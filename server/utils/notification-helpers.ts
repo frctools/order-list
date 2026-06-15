@@ -1,5 +1,6 @@
 import { useDB } from "./db";
 import { emailService } from "./email-service";
+import { useAuth } from "./auth";
 import { member } from "./auth-schema";
 import { eq } from "drizzle-orm";
 import OrderCreatedEmail from "./OrderCreatedEmail.vue";
@@ -14,9 +15,10 @@ export const notificationHelpers = {
     creatorId?: string,
   ) {
     const db = useDB();
+    const event = useEvent();
     const organization = await useAuth().api.getFullOrganization({
-      query: {organizationId},
-      headers: getHeaders(useEvent()) as Record<string, string>,
+      query: { organizationId },
+      headers: Object.entries(await getHeaders(event)) as [string, string][],
     });
     const members = await db.query.member.findMany({
       where: eq(member.organizationId, organizationId),
@@ -57,9 +59,10 @@ export const notificationHelpers = {
     newStatus: string,
   ) {
     const db = useDB();
+    const event = useEvent();
     const organization = await useAuth().api.getFullOrganization({
-      query: {organizationId},
-      headers: getHeaders(useEvent()) as Record<string, string>,
+      query: { organizationId },
+      headers: Object.entries(await getHeaders(event)) as [string, string][],
     });
 
     const members = await db.query.member.findMany({

@@ -1,4 +1,4 @@
-import { Resend } from "resend";
+import { Resend, type CreateBatchOptions } from "resend";
 import { render } from "@vue-email/render";
 import { useDB } from "./db";
 import { eq, and } from "drizzle-orm";
@@ -9,10 +9,10 @@ interface EmailOptions {
   to: string;
   subject: string;
   component: Component;
-  props: Record<string, any>;
+  props: Record<string, unknown>;
   organizationId: string;
   userId: string;
-  notificationType: string;
+  notificationType: NotificationType;
 }
 
 type NotificationType =
@@ -30,6 +30,10 @@ const notificationPreferenceDefaults: Record<
   orderCreated: false,
   orderStatusChanged: false,
   orderDeleted: false,
+  invitationReceived: true,
+  memberJoined: true,
+  tagCreated: false,
+  tagModified: false,
   dailyDigest: false,
   digestTime: "09:00",
   createdAt: new Date(),
@@ -106,7 +110,7 @@ export const emailService = {
         return { sent: 0, failed: 0, skipped: optionsList.length };
       }
 
-      const payload = prepared.map((entry) => ({
+      const payload: CreateBatchOptions = prepared.map((entry) => ({
         from: "notifications@orders.frctools.com",
         to: entry.to,
         subject: entry.subject,
@@ -114,7 +118,7 @@ export const emailService = {
         text: entry.text,
       }));
 
-      const { data, error } = await resend.batch.send(payload as any);
+      const { data, error } = await resend.batch.send(payload);
 
       if (error) {
         for (const entry of prepared) {
@@ -187,7 +191,7 @@ export const emailService = {
   async getOrCreatePreferences(
     userId: string,
     organizationId: string,
-  ): Promise<any> {
+  ): Promise<typeof notificationPreferences.$inferSelect | undefined> {
     const db = useDB();
 
     let prefs = await db.query.notificationPreferences.findFirst({
@@ -206,6 +210,10 @@ export const emailService = {
         orderCreated: true,
         orderStatusChanged: true,
         orderDeleted: false,
+        invitationReceived: true,
+        memberJoined: true,
+        tagCreated: false,
+        tagModified: false,
         dailyDigest: false,
         digestTime: "09:00",
         createdAt: new Date(),
@@ -224,7 +232,7 @@ export const emailService = {
     userId: string,
     organizationId: string,
     updates: Partial<typeof notificationPreferences.$inferInsert>,
-  ): Promise<any> {
+  ): Promise<typeof notificationPreferences.$inferSelect | null> {
     const db = useDB();
 
     const updated = await db
@@ -248,7 +256,7 @@ export const emailService = {
     userId: string,
     organizationId: string,
     limit: number = 20,
-  ): Promise<any[]> {
+  ): Promise<(typeof notificationLog.$inferSelect)[]> {
     const db = useDB();
 
     return db.query.notificationLog.findMany({

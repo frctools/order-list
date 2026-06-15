@@ -18,6 +18,9 @@ useSeoMeta({
 
 const searchTerm = useRouteQuery<string>("q", "");
 const debouncedSearch = refDebounced(searchTerm, 300);
+const auth = useAuth();
+const orgs = useOrgs();
+const toast = useToast();
 const selectedVendors = useRouteQuery<string[]>("vendors", []);
 const sortBy = useRouteQuery<"relevance" | "price-asc" | "price-desc">(
   "sort",
@@ -89,7 +92,7 @@ const searchResults = computed((): SearchResultItem[] => {
 // Available vendors come from facets endpoint (includes counts)
 const availableVendors = computed(() => {
   if (!vendorFacets.value) return [];
-  return vendorFacets.value
+  return [...vendorFacets.value]
     .sort((a, b) => b.count - a.count) // Sort by count descending
     .map((facet) => ({
       label: `${facet.value} (${facet.count})`,
@@ -118,6 +121,24 @@ function clearFilters() {
 
 function getAddToOrderUrl(originalUrl: string) {
   return `/app?add=${encodeURIComponent(originalUrl)}`;
+}
+
+const canCreateKit = computed(
+  () => Boolean(auth.session.value && orgs.organization.value),
+);
+
+async function goToCreateKitPage() {
+  if (!canCreateKit.value) {
+    toast.add({
+      title: "Log in to create kits",
+      description: "Kits are saved to your active organization.",
+      color: "warning",
+      icon: "i-lucide-log-in",
+    });
+    await navigateTo("/auth/login");
+    return;
+  }
+  await navigateTo("/app/kits/new");
 }
 </script>
 
@@ -167,6 +188,14 @@ function getAddToOrderUrl(originalUrl: string) {
             @click="clearFilters"
           >
             Clear filters
+          </UButton>
+          <UButton
+            variant="soft"
+            color="neutral"
+            icon="i-lucide-package-plus"
+            @click="goToCreateKitPage"
+          >
+            Create kit
           </UButton>
         </div>
 
@@ -373,6 +402,7 @@ function getAddToOrderUrl(originalUrl: string) {
           </div>
         </UPageCard>
       </div>
+
     </UContainer>
   </div>
 </template>

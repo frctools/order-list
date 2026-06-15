@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { ContentNavigationItem } from '@nuxt/content'
 import { findPageHeadline } from '@nuxt/content/utils'
-import { Doc } from 'better-auth'
 
 definePageMeta({
   layout: 'docs'

@@ -115,6 +115,80 @@ export const productCacheRelations = relations(productCache, ({ one }) => ({
   })
 }))
 
+export const kits = pgTable(
+  'kits',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => user.id, { onDelete: 'restrict' }),
+    shareId: text('share_id').notNull().unique(),
+    title: text('title').notNull(),
+    description: text('description'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at')
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull()
+  },
+  table => [
+    index('kits_organizationId_idx').on(table.organizationId),
+    index('kits_shareId_idx').on(table.shareId)
+  ]
+)
+
+export const kitItems = pgTable(
+  'kit_items',
+  {
+    id: text('id').primaryKey(),
+    kitId: text('kit_id')
+      .notNull()
+      .references(() => kits.id, { onDelete: 'cascade' }),
+    sortOrder: integer('sort_order').default(0).notNull(),
+    partName: text('part_name').notNull(),
+    description: text('description'),
+    quantity: integer('quantity').default(1).notNull(),
+    unitPriceCents: integer('unit_price_cents'),
+    variantId: text('variant_id'),
+    variantTitle: text('variant_title'),
+    vendorId: text('vendor_id'),
+    vendorName: text('vendor_name'),
+    externalUrl: text('external_url'),
+    imageUrl: text('image_url'),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => [
+    index('kit_items_kitId_idx').on(table.kitId),
+    index('kit_items_vendorId_idx').on(table.vendorId)
+  ]
+)
+
+export const kitsRelations = relations(kits, ({ one, many }) => ({
+  organization: one(organization, {
+    fields: [kits.organizationId],
+    references: [organization.id]
+  }),
+  creator: one(user, {
+    fields: [kits.createdBy],
+    references: [user.id]
+  }),
+  items: many(kitItems)
+}))
+
+export const kitItemsRelations = relations(kitItems, ({ one }) => ({
+  kit: one(kits, {
+    fields: [kitItems.kitId],
+    references: [kits.id]
+  }),
+  vendor: one(vendors, {
+    fields: [kitItems.vendorId],
+    references: [vendors.id]
+  })
+}))
+
 export const notificationPreferences = pgTable(
   "notification_preferences",
   {
@@ -128,6 +202,10 @@ export const notificationPreferences = pgTable(
     orderCreated: boolean("order_created").default(true).notNull(),
     orderStatusChanged: boolean("order_status_changed").default(true).notNull(),
     orderDeleted: boolean("order_deleted").default(false).notNull(),
+    invitationReceived: boolean("invitation_received").default(true).notNull(),
+    memberJoined: boolean("member_joined").default(true).notNull(),
+    tagCreated: boolean("tag_created").default(false).notNull(),
+    tagModified: boolean("tag_modified").default(false).notNull(),
     dailyDigest: boolean("daily_digest").default(false).notNull(),
     digestTime: text("digest_time").default("09:00").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -158,6 +236,8 @@ export const notificationLog = pgTable(
     subject: text("subject").notNull(),
     recipientEmail: text("recipient_email").notNull(),
     status: text("status").default("sent").notNull(), 
+    errorMessage: text("error_message"),
+    metadata: text("metadata"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [

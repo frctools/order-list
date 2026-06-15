@@ -9,6 +9,7 @@ export default defineNuxtConfig({
     "@nuxtjs/plausible",
     "@nuxtjs/mdc",
     "@sentry/nuxt/module",
+    "@vueuse/nuxt",
   ],
 
   devtools: {

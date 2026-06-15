@@ -15,7 +15,8 @@ export const useCurrentOrganization = () => {
 }
 
 export function useOrgs() {
-  const { client } = useAuth()
+  const auth = useAuth()
+  const { client } = auth
   const organization = useCurrentOrganization()
   const activeOrganizationId = useCookie('activeOrganizationId')
   const toast = useToast()
@@ -70,12 +71,21 @@ export function useOrgs() {
 
       organizations.value = fullOrgs
 
-      if (!activeOrganizationId.value && fullOrgs.length > 0) {
-        const [firstOrg] = fullOrgs
-        if (firstOrg) {
-          activeOrganizationId.value = firstOrg.id
-          await selectTeam(firstOrg.id, { showToast: false })
-          console.log(`Auto-selecting first organization: ${firstOrg.name}`)
+      const savedOrganization = fullOrgs.find(
+        org => org.id === activeOrganizationId.value
+      )
+      const selectedOrganization = savedOrganization ?? fullOrgs[0]
+
+      if (selectedOrganization) {
+        if (!savedOrganization) {
+          activeOrganizationId.value = selectedOrganization.id
+          console.log(
+            `Auto-selecting first organization: ${selectedOrganization.name}`
+          )
+        }
+        const isActive = await ensureActiveOrganization(selectedOrganization.id)
+        if (isActive) {
+          organization.value = selectedOrganization
         }
       }
 
@@ -87,16 +97,38 @@ export function useOrgs() {
 
   async function fetchCurrentOrganization() {
     if (!activeOrganizationId.value) return null
+    const isActive = await ensureActiveOrganization(activeOrganizationId.value)
+    if (!isActive) return null
     organization.value = await getFullOrganization(activeOrganizationId.value)
     return organization.value
   }
 
-  async function selectTeam(id: string, options: { showToast?: boolean } = {}) {
-    const { showToast = true } = options
-    await client.organization.setActive({
+  async function ensureActiveOrganization(id: string) {
+    if (auth.session.value?.activeOrganizationId === id) return true
+
+    const { error } = await client.organization.setActive({
       organizationId: id
     })
+
+    if (error) {
+      activeOrganizationId.value = null
+      organization.value = null
+      toast.add({
+        title: 'Failed to select organization',
+        color: 'error'
+      })
+      return false
+    }
+
     activeOrganizationId.value = id
+    await auth.fetchSession()
+    return true
+  }
+
+  async function selectTeam(id: string, options: { showToast?: boolean } = {}) {
+    const { showToast = true } = options
+    const isActive = await ensureActiveOrganization(id)
+    if (!isActive) return
     await fetchCurrentOrganization()
     if (showToast) {
       toast.add({

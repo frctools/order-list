@@ -1,22 +1,22 @@
 <script setup>
 useHead({
-  meta: [{ name: 'viewport', content: 'width=device-width, initial-scale=1' }],
-  link: [{ rel: 'icon', href: '/favicon.ico' }],
+  meta: [{ name: "viewport", content: "width=device-width, initial-scale=1" }],
+  link: [{ rel: "icon", href: "/favicon.ico" }],
   htmlAttrs: {
-    lang: 'en'
-  }
-})
+    lang: "en",
+  },
+});
 
-const title = 'FRCTools Orders'
-const description
-  = 'Manage and track your FRC team orders efficiently with FRCTools Orders.'
+const title = "FRCTools Orders";
+const description =
+  "Manage and track your FRC team orders efficiently with FRCTools Orders.";
 
 useSeoMeta({
   title,
   description,
   ogTitle: title,
-  ogDescription: description
-})
+  ogDescription: description,
+});
 </script>
 
 <template>
@@ -26,7 +26,8 @@ useSeoMeta({
         <NuxtLink
           class="font-bold font-display text-3xl text-blue-950 dark:text-white flex justify-center items-center gap-2"
           to="/"
-        >FRCTools <span class="md:inline hidden">Orders</span></NuxtLink>
+          >FRCTools <span class="md:inline hidden">Orders</span></NuxtLink
+        >
         <UButton
           to="/search"
           icon="i-lucide-search"

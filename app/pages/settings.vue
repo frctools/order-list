@@ -640,10 +640,10 @@ const saveProfile = async () => {
       description: "Your profile has been updated successfully.",
       color: "success",
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     toast.add({
       title: "Error",
-      description: error?.message || "Failed to update profile",
+      description: getErrorMessage(error, "Failed to update profile"),
       color: "error",
     });
   } finally {
@@ -656,7 +656,7 @@ const loadSessions = async () => {
   try {
     const response = await auth.client.listSessions();
     sessions.value = (response.data || []) as Session[];
-  } catch (error: any) {
+  } catch {
     toast.add({
       title: "Error",
       description: "Failed to load sessions",
@@ -677,10 +677,10 @@ const revokeSession = async (token: string) => {
       description: "The session has been signed out.",
       color: "success",
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     toast.add({
       title: "Error",
-      description: error?.message || "Failed to revoke session",
+      description: getErrorMessage(error, "Failed to revoke session"),
       color: "error",
     });
   } finally {
@@ -698,10 +698,10 @@ const revokeOtherSessions = async () => {
       description: "All other sessions have been signed out.",
       color: "success",
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     toast.add({
       title: "Error",
-      description: error?.message || "Failed to revoke sessions",
+      description: getErrorMessage(error, "Failed to revoke sessions"),
       color: "error",
     });
   } finally {
@@ -747,8 +747,11 @@ const changePassword = async () => {
       description: "Your password has been updated successfully.",
       color: "success",
     });
-  } catch (error: any) {
-    passwordError.value = error?.message || "Failed to change password. Make sure your current password is correct.";
+  } catch (error: unknown) {
+    passwordError.value = getErrorMessage(
+      error,
+      "Failed to change password. Make sure your current password is correct.",
+    );
   } finally {
     isChangingPassword.value = false;
   }
@@ -770,8 +773,11 @@ const deleteAccount = async () => {
     });
 
     await auth.signOut({ redirectTo: "/" });
-  } catch (error: any) {
-    deleteAccountError.value = error?.message || "Failed to delete account. Make sure your password is correct.";
+  } catch (error: unknown) {
+    deleteAccountError.value = getErrorMessage(
+      error,
+      "Failed to delete account. Make sure your password is correct.",
+    );
   } finally {
     isDeletingAccount.value = false;
   }
@@ -780,6 +786,10 @@ const deleteAccount = async () => {
 const formatDate = (date: string | Date) => {
   return format(new Date(date), "MMM d, yyyy 'at' h:mm a");
 };
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
 
 const parseUserAgent = (userAgent: string | null): string => {
   const parsed = new UAParser(userAgent || "");
