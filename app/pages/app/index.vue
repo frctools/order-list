@@ -699,8 +699,8 @@ watch(
   { immediate: true },
 );
 
-const startDate = ref<string | null>(null);
-const endDate = ref<string | null>(null);
+const startDate = ref<string | undefined>(undefined);
+const endDate = ref<string | undefined>(undefined);
 const vendorFilter = ref<string>("");
 const statusFilter = ref<StatusKey | undefined>(undefined);
 const tagFilter = ref<string>("");
@@ -765,8 +765,8 @@ const filteredCount = computed(() => filteredTableRows.value.length);
 const isExportingCsv = ref(false);
 
 function clearFilters() {
-  startDate.value = null;
-  endDate.value = null;
+  startDate.value = undefined;
+  endDate.value = undefined;
   vendorFilter.value = "";
   statusFilter.value = undefined;
   tagFilter.value = "";

@@ -203,7 +203,7 @@ watchEffect(async () => {
       const response = await $fetch("/api/vendors/search", {
         query: { q: searchQuery, limit: 5 },
       });
-      results.set(rowKey(part), response.hits as SearchHit[]);
+      results.set(rowKey(part), response.hits as unknown as SearchHit[]);
     });
 
     await Promise.all(searches);

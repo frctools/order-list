@@ -1,4 +1,4 @@
-import { MeiliSearch } from "meilisearch";
+import { Meilisearch } from "meilisearch";
 import { z } from "zod";
 
 export default defineEventHandler(async (event) => {
@@ -32,7 +32,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const client = new MeiliSearch({
+  const client = new Meilisearch({
     host: meiliHost,
     apiKey: meiliKey,
   });
