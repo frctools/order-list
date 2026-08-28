@@ -35,45 +35,129 @@ export const orderStatusEnum = pgEnum('order_status', [
   'arrived'
 ])
 
-export const orders = pgTable('orders', {
-  id: text('id').primaryKey(),
-  organizationId: text('organization_id')
-    .notNull()
-    .references(() => organization.id, { onDelete: 'cascade' }),
-  partName: text('part_name').notNull(),
-  description: text('description'),
-  status: orderStatusEnum('status').default('to_order').notNull(),
-  quantity: integer('quantity').default(1).notNull(),
-  unitPriceCents: integer('unit_price_cents'),
-  variantId: text('variant_id'),
-  variantTitle: text('variant_title'),
-  vendorId: text('vendor_id'),
-  vendorName: text('vendor_name'),
-  externalUrl: text('external_url'),
-  orderedAt: timestamp('ordered_at'),
-  arrivedAt: timestamp('arrived_at'),
-  requestedBy: text('requested_by')
-    .notNull()
-    .references(() => user.id, { onDelete: 'restrict' }),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at')
-    .defaultNow()
-    .$onUpdate(() => /* @__PURE__ */ new Date())
-    .notNull()
-})
-
-export const orderTags = pgTable(
-  'order_tags',
+// An order is a per-vendor purchase order (the header). Parts live in
+// `order_items`. Status and vendor live here; the order advances as a unit.
+export const orders = pgTable(
+  'orders',
   {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    vendorId: text('vendor_id').references(() => vendors.id, {
+      onDelete: 'set null'
+    }),
+    vendorName: text('vendor_name'),
+    status: orderStatusEnum('status').default('to_order').notNull(),
+    requestedBy: text('requested_by')
+      .notNull()
+      .references(() => user.id, { onDelete: 'restrict' }),
+    orderedAt: timestamp('ordered_at'),
+    arrivedAt: timestamp('arrived_at'),
+    // Post-order fulfilment details.
+    trackingCarrier: text('tracking_carrier'),
+    trackingNumber: text('tracking_number'),
+    shippingCents: integer('shipping_cents'),
+    taxCents: integer('tax_cents'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at')
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull()
+  },
+  table => [
+    index('orders_organizationId_idx').on(table.organizationId),
+    index('orders_status_idx').on(table.status)
+  ]
+)
+
+// A single part (line item) within an order.
+export const orderItems = pgTable(
+  'order_items',
+  {
+    id: text('id').primaryKey(),
     orderId: text('order_id')
       .notNull()
       .references(() => orders.id, { onDelete: 'cascade' }),
+    partName: text('part_name').notNull(),
+    description: text('description'),
+    quantity: integer('quantity').default(1).notNull(),
+    unitPriceCents: integer('unit_price_cents'),
+    variantId: text('variant_id'),
+    variantTitle: text('variant_title'),
+    externalUrl: text('external_url'),
+    requestedBy: text('requested_by')
+      .notNull()
+      .references(() => user.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at')
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull()
+  },
+  table => [index('order_items_orderId_idx').on(table.orderId)]
+)
+
+// Tags are attached to individual parts (line items).
+export const orderTags = pgTable(
+  'order_tags',
+  {
+    orderItemId: text('order_item_id')
+      .notNull()
+      .references(() => orderItems.id, { onDelete: 'cascade' }),
     tagId: text('tag_id')
       .notNull()
       .references(() => tags.id, { onDelete: 'cascade' })
   },
-  table => [primaryKey({ columns: [table.orderId, table.tagId] })]
+  table => [primaryKey({ columns: [table.orderItemId, table.tagId] })]
 )
+
+// How an order was paid for — supports split payments (e.g. part on a credit
+// card, part via a Kit of Parts voucher, part off a coupon code).
+export const orderPayments = pgTable(
+  'order_payments',
+  {
+    id: text('id').primaryKey(),
+    orderId: text('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    type: text('type')
+      .notNull()
+      .$type<'credit_card' | 'voucher' | 'coupon' | 'other'>(),
+    label: text('label').notNull(),
+    amountCents: integer('amount_cents').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => [index('order_payments_orderId_idx').on(table.orderId)]
+)
+
+export const ordersRelations = relations(orders, ({ one, many }) => ({
+  organization: one(organization, {
+    fields: [orders.organizationId],
+    references: [organization.id]
+  }),
+  vendor: one(vendors, {
+    fields: [orders.vendorId],
+    references: [vendors.id]
+  }),
+  items: many(orderItems),
+  payments: many(orderPayments)
+}))
+
+export const orderPaymentsRelations = relations(orderPayments, ({ one }) => ({
+  order: one(orders, {
+    fields: [orderPayments.orderId],
+    references: [orders.id]
+  })
+}))
+
+export const orderItemsRelations = relations(orderItems, ({ one, many }) => ({
+  order: one(orders, {
+    fields: [orderItems.orderId],
+    references: [orders.id]
+  }),
+  orderTags: many(orderTags)
+}))
 
 export const tagsRelations = relations(tags, ({ one, many }) => ({
   organization: one(organization, {
@@ -84,18 +168,14 @@ export const tagsRelations = relations(tags, ({ one, many }) => ({
 }))
 
 export const orderTagsRelations = relations(orderTags, ({ one }) => ({
-  order: one(orders, {
-    fields: [orderTags.orderId],
-    references: [orders.id]
+  orderItem: one(orderItems, {
+    fields: [orderTags.orderItemId],
+    references: [orderItems.id]
   }),
   tag: one(tags, {
     fields: [orderTags.tagId],
     references: [tags.id]
   })
-}))
-
-export const ordersRelations = relations(orders, ({ many }) => ({
-  orderTags: many(orderTags)
 }))
 
 export const productCache = pgTable('product_cache', {
@@ -154,10 +234,12 @@ export const notificationLog = pgTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
-    type: text("type").notNull(), 
+    type: text("type").notNull(),
     subject: text("subject").notNull(),
     recipientEmail: text("recipient_email").notNull(),
-    status: text("status").default("sent").notNull(), 
+    status: text("status").default("sent").notNull(),
+    errorMessage: text("error_message"),
+    metadata: text("metadata"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [

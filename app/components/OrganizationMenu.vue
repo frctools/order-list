@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch, onMounted } from 'vue'
-import { z } from 'zod'
+import * as z from 'zod'
 import type { DropdownMenuItem, FormSubmitEvent } from '#ui/types'
 import { createTeamSchema } from '~/composables/organizations'
 

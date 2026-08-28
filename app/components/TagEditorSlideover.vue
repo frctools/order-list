@@ -91,7 +91,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue'
-import { z } from 'zod'
+import * as z from 'zod'
 import type { FormSubmitEvent } from '#ui/types'
 
 const props = defineProps<{

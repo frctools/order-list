@@ -89,8 +89,10 @@
 
             <div class="grid gap-4 md:grid-cols-2">
               <UFormField
+                v-if="mode === 'create' && !hideVendor"
                 name="vendorId"
                 label="Vendor"
+                help="Parts group into this vendor's order."
               >
                 <UInput
                   v-model="formState.vendorId"
@@ -198,21 +200,24 @@
 
 <script setup lang="ts">
 import { reactive, ref, watch, watchEffect, computed } from 'vue'
-import { z } from 'zod'
+import * as z from 'zod'
 import type { FormSubmitEvent } from '#ui/types'
 import type {
-  Order,
   OrderEditorSubmitPayload,
   OrderEditorValues,
+  OrderItem,
   Tag
 } from '~/types/orders'
 
 const props = defineProps<{
   mode: 'create' | 'edit'
   loading?: boolean
-  initialOrder?: Order | null
+  // The line item being edited (with its parent order id).
+  initialItem?: (OrderItem & { orderId: string }) | null
   initialUrl?: string | null
   availableTags?: Tag[]
+  // When adding a part to a specific existing order, vendor is inherited.
+  hideVendor?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -296,19 +301,19 @@ const tagOptions = computed(() =>
 )
 
 const headerTitle = computed(() =>
-  props.mode === 'edit' ? 'Edit order' : 'New order'
+  props.mode === 'edit' ? 'Edit part' : 'Add part'
 )
 const headerDescription = computed(() =>
   props.mode === 'edit'
-    ? 'Update the order details and save your changes.'
-    : 'Fill out the details below to create a new order request.'
+    ? 'Update this part and save your changes.'
+    : 'Add a part — it groups into the vendor\'s order automatically.'
 )
 const actionLabel = computed(() =>
-  props.mode === 'edit' ? 'Save changes' : 'Create order'
+  props.mode === 'edit' ? 'Save changes' : 'Add part'
 )
 
 watch(
-  () => [isOpen.value, props.mode, props.initialOrder],
+  () => [isOpen.value, props.mode, props.initialItem],
   () => {
     if (!isOpen.value) {
       return
@@ -357,58 +362,28 @@ watchEffect((onCleanup) => {
   (async () => {
     try {
       isLookingUpVendor.value = true
+
+      // Primary: self-contained extractor (Shopify JSON / JSON-LD / OpenGraph)
+      // that covers common FRC vendors directly from the product page.
+      const extracted = await $fetch<ExtractionResponse>(
+        '/api/vendors/extract',
+        {
+          query: { url: externalUrl },
+          signal: controller.signal
+        }
+      )
+
+      if (extracted.product) {
+        await applyExtractedProduct(extracted)
+        return
+      }
+
+      // Fallback: the external scraper service (BigCommerce/Amazon/etc.).
       const data = await $fetch<VendorProductResponse>('/api/vendors', {
         query: { url: externalUrl },
         signal: controller.signal
       })
-      isLookingUpVendor.value = false
-      formState.vendorId = data.vendor.id
-
-      const product = data.productData?.product
-      if (!product) {
-        variantOptions.value = []
-        return
-      }
-
-      if (product.title) {
-        formState.partName = product.title
-        await orderForm.value?.validate({
-          name: 'partName'
-        })
-      }
-
-      const options
-        = product.variants?.map((variant) => {
-          const formattedPrice = formatVariantPriceLabel(variant.price ?? null)
-          return {
-            label: formattedPrice
-              ? `${variant.title} · ${formattedPrice}`
-              : variant.title,
-            value: String(variant.id),
-            title: variant.title,
-            price: variant.price ?? null
-          } satisfies VariantOption
-        }) ?? []
-
-      variantOptions.value = options
-
-      if (options.length > 0) {
-        const preferredId = data.variantId
-          ? String(data.variantId)
-          : formState.variantId
-        const existing
-          = options.find(option => option.value === preferredId) ?? options[0]
-        if (existing) {
-          formState.variantId = existing.value
-          formState.variantTitle = existing.title
-          if (existing.price != null) {
-            formState.unitPrice = existing.price
-          }
-        }
-      } else {
-        formState.variantId = ''
-        formState.variantTitle = ''
-      }
+      await applyScraperProduct(data)
     } catch (error) {
       if (!controller.signal.aborted) {
         variantOptions.value = []
@@ -422,24 +397,125 @@ watchEffect((onCleanup) => {
   })()
 })
 
-function initializeFormState() {
-  if (props.mode === 'edit' && props.initialOrder) {
-    skipNextVendorLookup.value = true
-    formState.externalUrl = props.initialOrder.externalUrl ?? ''
-    formState.partName = props.initialOrder.partName
-    formState.quantity = props.initialOrder.quantity
-    formState.unitPrice
-      = props.initialOrder.unitPriceCents !== null
-        ? (props.initialOrder.unitPriceCents / 100).toFixed(2)
-        : ''
-    formState.vendorId = props.initialOrder.vendorId ?? ''
-    if (!formState.vendorId) {
-      formState.vendorId = props.initialOrder.vendorName ?? ''
+async function applyExtractedProduct(data: ExtractionResponse) {
+  const product = data.product
+  if (!product) {
+    variantOptions.value = []
+    return
+  }
+
+  if (data.vendorName) {
+    formState.vendorId = data.vendorName
+  }
+
+  if (product.title) {
+    formState.partName = product.title
+    await orderForm.value?.validate({ name: 'partName' })
+  }
+
+  // Auto-fill Notes with the product description, but never clobber notes the
+  // user has already typed.
+  if (product.description && !formState.description.trim()) {
+    formState.description = product.description
+  }
+
+  // The stored "variant" value is the SKU when we have one (falls back to the
+  // platform variant id), matching the field's "Variant SKU or ID" intent.
+  const options = product.variants.map((variant) => {
+    const priceString = variant.price != null ? String(variant.price) : null
+    const formattedPrice = formatVariantPriceLabel(priceString)
+    return {
+      label: formattedPrice
+        ? `${variant.title} · ${formattedPrice}`
+        : variant.title,
+      value: variant.sku ?? variant.id,
+      title: variant.title,
+      price: priceString
+    } satisfies VariantOption
+  })
+  variantOptions.value = options
+
+  if (options.length > 0) {
+    const existing = options[0]!
+    formState.variantId = existing.value
+    formState.variantTitle = existing.title
+    if (existing.price != null) {
+      formState.unitPrice = existing.price
     }
-    formState.variantId = props.initialOrder.variantId ?? ''
-    formState.variantTitle = props.initialOrder.variantTitle ?? ''
-    formState.description = props.initialOrder.description ?? ''
-    formState.tagIds = props.initialOrder.tags?.map(t => t.id) ?? []
+  } else {
+    formState.variantId = product.sku ?? ''
+    formState.variantTitle = product.variantTitle ?? ''
+  }
+
+  if (product.price != null && !formState.unitPrice) {
+    formState.unitPrice = String(product.price)
+  }
+}
+
+async function applyScraperProduct(data: VendorProductResponse) {
+  formState.vendorId = data.vendor.id
+
+  const product = data.productData?.product
+  if (!product) {
+    variantOptions.value = []
+    return
+  }
+
+  if (product.title) {
+    formState.partName = product.title
+    await orderForm.value?.validate({ name: 'partName' })
+  }
+
+  const options
+    = product.variants?.map((variant) => {
+      const formattedPrice = formatVariantPriceLabel(variant.price ?? null)
+      return {
+        label: formattedPrice
+          ? `${variant.title} · ${formattedPrice}`
+          : variant.title,
+        value: String(variant.id),
+        title: variant.title,
+        price: variant.price ?? null
+      } satisfies VariantOption
+    }) ?? []
+
+  variantOptions.value = options
+
+  if (options.length > 0) {
+    const preferredId = data.variantId
+      ? String(data.variantId)
+      : formState.variantId
+    const existing
+      = options.find(option => option.value === preferredId) ?? options[0]
+    if (existing) {
+      formState.variantId = existing.value
+      formState.variantTitle = existing.title
+      if (existing.price != null) {
+        formState.unitPrice = existing.price
+      }
+    }
+  } else {
+    formState.variantId = ''
+    formState.variantTitle = ''
+  }
+}
+
+function initializeFormState() {
+  if (props.mode === 'edit' && props.initialItem) {
+    skipNextVendorLookup.value = true
+    formState.externalUrl = props.initialItem.externalUrl ?? ''
+    formState.partName = props.initialItem.partName
+    formState.quantity = props.initialItem.quantity
+    formState.unitPrice
+      = props.initialItem.unitPriceCents !== null
+        ? (props.initialItem.unitPriceCents / 100).toFixed(2)
+        : ''
+    // Vendor lives on the order, not the item, so it isn't edited here.
+    formState.vendorId = ''
+    formState.variantId = props.initialItem.variantId ?? ''
+    formState.variantTitle = props.initialItem.variantTitle ?? ''
+    formState.description = props.initialItem.description ?? ''
+    formState.tagIds = props.initialItem.tags?.map(t => t.id) ?? []
   } else {
     resetFormState()
   }
@@ -479,7 +555,8 @@ function handleSubmit(event: FormSubmitEvent<OrderFormSchema>) {
 
   emit('submit', {
     mode: props.mode,
-    orderId: props.initialOrder?.id ?? null,
+    orderId: props.initialItem?.orderId ?? null,
+    itemId: props.initialItem?.id ?? null,
     values: payload
   })
 }
@@ -504,6 +581,25 @@ interface VariantOption {
   value: string
   title: string
   price?: string | null
+}
+
+interface ExtractionResponse {
+  vendorName: string
+  source: 'shopify' | 'json-ld' | 'opengraph' | 'none'
+  product: {
+    title: string
+    description: string | null
+    price: number | null
+    currency: string | null
+    sku: string | null
+    variantTitle: string | null
+    variants: Array<{
+      id: string
+      sku: string | null
+      title: string
+      price: number | null
+    }>
+  } | null
 }
 
 interface VendorProductResponse {

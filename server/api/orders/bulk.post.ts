@@ -1,7 +1,7 @@
 import { defineEventHandler, readBody, createError } from "h3";
 import { z } from "zod";
 import { requireOrganizationContext } from "../../utils/session";
-import { createOrderSchema, createOrdersBulk } from "../../utils/order-service";
+import { createOrderSchema, addLineItemsBulk } from "../../utils/order-service";
 import { notificationHelpers } from "../../utils/notification-helpers";
 
 const bulkCreateSchema = z.object({
@@ -22,19 +22,19 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const createdOrders = await createOrdersBulk(parsed.data.orders, {
+  const orders = await addLineItemsBulk(parsed.data.orders, {
     organizationId,
     userId: user.id,
   });
 
-  // Send notifications for each created order (fire and forget)
-  for (const order of createdOrders) {
+  // Notify once per affected order (fire and forget).
+  for (const order of orders) {
     notificationHelpers
       .notifyOrderCreated(
         organizationId,
         order.id,
-        order.partName,
-        order.description,
+        order.vendorName ?? "New order",
+        null,
         user.id,
       )
       .catch((err) =>
@@ -42,5 +42,5 @@ export default defineEventHandler(async (event) => {
       );
   }
 
-  return { orders: createdOrders };
+  return { orders };
 });

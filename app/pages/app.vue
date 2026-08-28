@@ -9,7 +9,7 @@
             Orders
           </h1>
           <p class="text-sm text-gray-500">
-            Track parts from request to delivery for your team.
+            Parts grouped into per-vendor orders, from request to delivery.
           </p>
         </div>
 
@@ -36,10 +36,10 @@
             icon="i-lucide-import"
             @click="handleImportClick"
           >
-            Import orders
+            Import
           </UButton>
           <UButton icon="i-lucide-plus" @click="() => openCreateEditor()">
-            New order
+            Add part
           </UButton>
         </div>
       </header>
@@ -53,6 +53,7 @@
         :description="extractErrorMessage(error)"
       />
 
+      <!-- Board view: kanban of orders by status -->
       <div v-if="viewMode === 'board'">
         <div
           v-if="isPending && ordersState.length === 0"
@@ -81,262 +82,126 @@
                 </p>
               </div>
               <UBadge variant="soft" :color="column.color">
-                {{ column.items.length }}
+                {{ formatCurrencyFromCents(column.totalCents) ?? '$0.00' }}
               </UBadge>
             </div>
 
             <div
               class="flex-1 space-y-3 rounded-xl border border-dashed border-gray-300/60 bg-white/80 p-3 transition-all dark:bg-gray-950/60"
-              :class="
+              :class="[
                 dropTarget === column.key
                   ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-transparent'
-                  : ''
-              "
+                  : '',
+                draggingPart && column.key === 'to_order'
+                  ? 'border-primary-400/70 bg-primary-50/40 dark:bg-primary-950/20'
+                  : '',
+              ]"
               @dragover.prevent="onDragOver(column.key)"
               @dragleave="onDragLeave(column.key)"
               @drop.prevent="onDrop(column.key)"
             >
               <p
-                v-if="column.items.length === 0"
+                v-if="draggingPart && column.key === 'to_order'"
+                class="rounded-lg border border-dashed border-primary-400/70 py-3 text-center text-xs font-medium text-primary-600 dark:text-primary-300"
+              >
+                Drop here to split into its own order
+              </p>
+              <p
+                v-else-if="column.orders.length === 0"
                 class="py-10 text-center text-sm text-gray-500"
               >
-                Drag an order here or create a new one.
+                Drag an order here or add a part.
               </p>
 
-              <UCard
-                v-for="order in column.items"
+              <div
+                v-for="order in column.orders"
                 :key="order.id"
-                class="cursor-grab active:cursor-grabbing"
-                :draggable="!isOrderUpdating(order.id)"
-                @dragstart="onDragStart(order.id)"
-                @dragend="onDragEnd"
+                class="rounded-xl"
+                :class="
+                  dropOrderTarget === order.id
+                    ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-transparent'
+                    : ''
+                "
+                @dragover="onCardDragOver($event, order)"
+                @dragleave="onCardDragLeave(order)"
+                @drop="onCardDrop($event, order)"
               >
-                <template #header>
-                  <div class="flex items-start justify-between gap-2">
-                    <div>
-                      <p
-                        class="text-sm font-semibold leading-tight text-gray-900 dark:text-white"
-                      >
-                        {{ order.partName }}
-                      </p>
-                      <p class="text-xs text-gray-500">
-                        Requested by
-                        {{ order.requestedByName ?? "unknown user" }}
-                      </p>
-                    </div>
-                    <UBadge color="neutral" variant="soft" size="sm">
-                      x{{ order.quantity }}
-                    </UBadge>
-                  </div>
-                </template>
-
-                <div class="space-y-3">
-                  <p
-                    v-if="order.description"
-                    class="text-sm text-gray-500 dark:text-gray-300"
-                  >
-                    {{ order.description }}
-                  </p>
-
-                  <div class="grid gap-2 text-xs text-gray-500">
-                    <div
-                      v-if="order.unitPriceCents !== null"
-                      class="flex items-center gap-2"
-                    >
-                      <UIcon name="i-lucide-banknote" class="text-sm" />
-                      <span>{{
-                        formatCurrencyFromCents(order.unitPriceCents)
-                      }}</span>
-                    </div>
-                    <div
-                      v-if="order.variantTitle || order.variantId"
-                      class="flex items-center gap-2"
-                    >
-                      <UIcon name="i-lucide-tags" class="text-sm" />
-                      <span>
-                        {{ order.variantTitle ?? order.variantId }}
-                        <span
-                          v-if="order.variantTitle && order.variantId"
-                          class="text-gray-400"
-                        >
-                          ({{ order.variantId }})
-                        </span>
-                      </span>
-                    </div>
-                    <div
-                      v-if="order.vendorName"
-                      class="flex items-center gap-2"
-                    >
-                      <UIcon name="i-lucide-store" class="text-sm" />
-                      <span>{{ order.vendorName }}</span>
-                    </div>
-
-                    <div v-if="order.orderedAt" class="flex items-center gap-2">
-                      <UIcon name="i-lucide-calendar-check" class="text-sm" />
-                      <span>Ordered {{ formatDate(order.orderedAt) }}</span>
-                    </div>
-                    <div v-if="order.arrivedAt" class="flex items-center gap-2">
-                      <UIcon name="i-lucide-package-check" class="text-sm" />
-                      <span>Arrived {{ formatDate(order.arrivedAt) }}</span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                      <UIcon name="i-lucide-clock-8" class="text-sm" />
-                      <span
-                        >Updated
-                        {{ formatDate(order.updatedAt) ?? "just now" }}</span
-                      >
-                    </div>
-                  </div>
-
-                  <div
-                    v-if="order.tags && order.tags.length > 0"
-                    class="mt-3 flex flex-wrap gap-1"
-                  >
-                    <UBadge
-                      v-for="tag in order.tags"
-                      :key="tag.id"
-                      variant="subtle"
-                      size="xs"
-                      :style="{
-                        backgroundColor: tag.color,
-                      }"
-                      :class="textColor(tag.color)"
-                    >
-                      {{ tag.name }}
-                    </UBadge>
-                  </div>
-                </div>
-
-                <template #footer>
-                  <div class="flex flex-wrap justify-end gap-2">
-                    <UButton
-                      v-if="order.externalUrl"
-                      size="xs"
-                      variant="soft"
-                      color="neutral"
-                      icon="i-lucide-shopping-cart"
-                      :to="order.externalUrl"
-                      target="_blank"
-                    >
-                      Order
-                    </UButton>
-                    <UButton
-                      v-if="getNextStatus(order.status)"
-                      size="xs"
-                      variant="soft"
-                      color="primary"
-                      icon="i-lucide-chevrons-right"
-                      :loading="isOrderUpdating(order.id)"
-                      @click="advanceStatus(order)"
-                    >
-                      Advance
-                    </UButton>
-                    <UButton
-                      size="xs"
-                      variant="soft"
-                      color="neutral"
-                      icon="i-lucide-pencil"
-                      :loading="isOrderUpdating(order.id)"
-                      @click="openEditEditor(order)"
-                    >
-                      Edit
-                    </UButton>
-                    <UButton
-                      size="xs"
-                      variant="soft"
-                      color="error"
-                      icon="i-lucide-trash-2"
-                      :loading="isOrderDeleting(order.id)"
-                      @click="deleteOrder(order)"
-                    >
-                      Remove
-                    </UButton>
-                  </div>
-                </template>
-              </UCard>
+                <OrderCard
+                  :order="order"
+                  :updating="isOrderUpdating(order.id)"
+                  :deleting="isOrderDeleting(order.id)"
+                  @advance="advanceOrder"
+                  @delete-order="deleteOrder"
+                  @add-item="openAddToOrder"
+                  @edit-item="onEditItem"
+                  @delete-item="onDeleteItem"
+                  @order-dragstart="onDragStart(order.id)"
+                  @order-dragend="onDragEnd"
+                  @part-dragstart="onPartDragStart"
+                  @part-dragend="onPartDragEnd"
+                  @open-details="openDetails"
+                />
+              </div>
             </div>
           </div>
         </div>
       </div>
 
+      <!-- Table view: orders grouped with totals -->
       <div v-else class="overflow-hidden">
         <div class="mb-4 grid gap-4 md:grid-cols-3">
-          <div class="space-y-2">
-            <UFormField label="Start date">
-              <UInput
-                v-model="startDate"
-                type="date"
-                class="w-full"
-                size="xl"
-              />
-            </UFormField>
-          </div>
-          <div class="space-y-2">
-            <UFormField label="End date">
-              <UInput v-model="endDate" type="date" class="w-full" size="xl" />
-            </UFormField>
-          </div>
-          <div class="space-y-2">
-            <UFormField label="Vendor">
-              <USelectMenu
-                v-model="vendorFilter"
-                :items="vendorOptions"
-                value-key="value"
-                searchable
-                placeholder="All vendors"
-                class="w-full"
-                size="xl"
-              />
-            </UFormField>
-          </div>
-          <div class="space-y-2">
-            <UFormField label="Status">
-              <USelectMenu
-                v-model="statusFilter"
-                :items="
-                  Object.values(statusLookup).map((x) => ({
-                    value: x.key,
-                    label: x.label,
-                  }))
-                "
-                value-key="value"
-                searchable
-                placeholder="All statuses"
-                class="w-full"
-                size="xl"
-              />
-            </UFormField>
-          </div>
-          <div class="space-y-2">
-            <UFormField label="Tag">
-              <USelectMenu
-                v-model="tagFilter"
-                :items="tagOptions"
-                value-key="value"
-                searchable
-                placeholder="All tags"
-                class="w-full"
-                size="xl"
-              />
-            </UFormField>
-          </div>
+          <UFormField label="Start date">
+            <UInput v-model="startDate" type="date" class="w-full" size="xl" />
+          </UFormField>
+          <UFormField label="End date">
+            <UInput v-model="endDate" type="date" class="w-full" size="xl" />
+          </UFormField>
+          <UFormField label="Vendor">
+            <USelectMenu
+              v-model="vendorFilter"
+              :items="vendorOptions"
+              value-key="value"
+              searchable
+              placeholder="All vendors"
+              class="w-full"
+              size="xl"
+            />
+          </UFormField>
+          <UFormField label="Status">
+            <USelectMenu
+              v-model="statusFilter"
+              :items="statuses.map((s) => ({ value: s.key, label: s.label }))"
+              value-key="value"
+              searchable
+              placeholder="All statuses"
+              class="w-full"
+              size="xl"
+            />
+          </UFormField>
+          <UFormField label="Tag">
+            <USelectMenu
+              v-model="tagFilter"
+              :items="tagOptions"
+              value-key="value"
+              searchable
+              placeholder="All tags"
+              class="w-full"
+              size="xl"
+            />
+          </UFormField>
         </div>
 
         <div class="mb-6 flex items-center justify-between gap-4">
           <div>
             <h2 class="text-lg font-medium text-gray-900 dark:text-white">
-              Total
-              {{
-                statusFilter
-                  ? statusLookup[statusFilter]?.pastTense
-                  : "spent and requested"
-              }}
+              Total {{ statusFilter ? statusLabel(statusFilter) : "across orders" }}
             </h2>
             <p class="text-2xl font-semibold">
-              {{ formatCurrencyFromCents(totalSpentCents) ?? "$0.00" }}
+              {{ formatCurrencyFromCents(grandTotalCents) ?? "$0.00" }}
             </p>
             <p class="text-sm text-gray-500">
-              Showing {{ filteredCount }} orders
+              {{ filteredOrders.length }} orders ·
+              {{ filteredItemCount }} parts
             </p>
           </div>
 
@@ -345,7 +210,7 @@
               variant="soft"
               color="neutral"
               icon="i-lucide-download"
-              :disabled="filteredTableRows.length === 0"
+              :disabled="filteredOrders.length === 0"
               :loading="isExportingCsv"
               @click="exportOrdersCsv"
             >
@@ -356,128 +221,191 @@
             </UButton>
           </div>
         </div>
+
         <div v-if="isPending && ordersState.length === 0" class="space-y-2">
           <USkeleton v-for="row in 6" :key="row" class="h-12 rounded-lg" />
         </div>
-        <UTable
-          v-else
-          :columns="orderTableColumns"
-          :data="filteredTableRows"
-          :loading="isPending"
-          class="w-full"
-        >
-          <template #partName-cell="{ row }">
-            <div class="flex flex-col">
-              <span
-                class="text-sm font-semibold text-gray-900 dark:text-white max-w-48 text-wrap"
-              >
-                {{ row.getValue("partName") }}
-              </span>
-              <span
-                v-if="row.original.description"
-                class="text-xs text-gray-500 max-w-48 text-wrap line-clamp-3"
-              >
-                {{ row.original.description }}
-              </span>
-            </div>
-          </template>
-          <template #tags-cell="{ row }">
-            <div class="flex flex-wrap gap-1">
-              <UBadge
-                v-for="tag in row.original.tags"
-                :key="tag.id"
-                variant="subtle"
-                size="xs"
-                :style="{
-                  backgroundColor: tag.color,
-                }"
-                :class="textColor(tag.color)"
-              >
-                {{ tag.name }}
-              </UBadge>
-            </div>
-          </template>
-          <template #status-cell="{ row }">
-            <UBadge
-              variant="soft"
-              :color="
-                statusLookup[
-                  row.getValue('status') as keyof typeof statusLookup
-                ]?.color ?? 'neutral'
-              "
+
+        <div v-else class="space-y-4">
+          <div
+            v-for="order in filteredOrders"
+            :key="order.id"
+            class="rounded-xl border border-gray-200/70 dark:border-gray-800/70"
+            :class="
+              dropOrderTarget === order.id
+                ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-transparent'
+                : ''
+            "
+            @dragover="onCardDragOver($event, order)"
+            @dragleave="onCardDragLeave(order)"
+            @drop="onCardDrop($event, order)"
+          >
+            <div
+              class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200/70 p-3 dark:border-gray-800/70"
             >
-              {{
-                statusLookup[
-                  row.getValue("status") as keyof typeof statusLookup
-                ]?.label ?? row.getValue("status")
-              }}
-            </UBadge>
-          </template>
-
-          <template #quantity-cell="{ row }">
-            <span class="font-medium text-gray-900 dark:text-white">
-              x{{ row.getValue("quantity") }}
-            </span>
-          </template>
-
-          <template #unitPriceCents-cell="{ row }">
-            {{
-              formatCurrencyFromCents(row.getValue("unitPriceCents")) ?? "--"
-            }}
-          </template>
-
-          <template #vendorName-cell="{ row }">
-            {{ row.getValue("vendorName") ?? row.original["vendorId"] ?? "--" }}
-          </template>
-
-          <template #requestedByName-cell="{ row }">
-            {{
-              row.getValue("requestedByName") ??
-              row.getValue("requestedBy") ??
-              "--"
-            }}
-          </template>
-
-          <template #updatedAt-cell="{ row }">
-            {{ formatDate(row.getValue("updatedAt")) ?? "--" }}
-          </template>
-
-          <template #actions-cell="{ row }">
-            <div class="flex justify-end gap-2">
-              <UButton
-                v-if="getNextStatus(row.getValue('status'))"
-                size="xs"
-                variant="ghost"
-                color="primary"
-                icon="i-lucide-chevrons-right"
-                :loading="isOrderUpdating(row.id)"
-                @click="advanceStatus(row.original)"
-              >
-                Advance
-              </UButton>
-              <UButton
-                size="xs"
-                variant="ghost"
-                color="neutral"
-                icon="i-lucide-pencil"
-                :loading="isOrderUpdating(row.id)"
-                @click="openEditEditor(row.original)"
-              >
-                Edit
-              </UButton>
-              <UButton
-                size="xs"
-                variant="ghost"
-                color="error"
-                icon="i-lucide-trash-2"
-                :loading="isOrderDeleting(row.original.id)"
-                @click="deleteOrder(row.original)"
-              >
-                Remove
-              </UButton>
+              <div class="flex items-center gap-3">
+                <UIcon name="i-lucide-store" class="text-gray-500" />
+                <div>
+                  <p class="font-semibold text-gray-900 dark:text-white">
+                    {{ order.vendorName?.trim() || "No vendor" }}
+                  </p>
+                  <p class="text-xs text-gray-500">
+                    {{ order.itemCount }} parts · opened by
+                    {{ order.requestedByName ?? "unknown" }}
+                  </p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3">
+                <UBadge variant="soft" :color="statusColor(order.status)">
+                  {{ statusLabel(order.status) }}
+                </UBadge>
+                <span class="text-lg font-semibold">
+                  {{ formatCurrencyFromCents(order.grandTotalCents) ?? "$0.00" }}
+                </span>
+                <UButton
+                  v-if="nextStatus(order.status)"
+                  size="xs"
+                  variant="ghost"
+                  color="primary"
+                  icon="i-lucide-chevrons-right"
+                  :loading="isOrderUpdating(order.id)"
+                  @click="advanceOrder(order)"
+                >
+                  {{ statusLabel(nextStatus(order.status)!) }}
+                </UButton>
+                <UButton
+                  v-if="order.status !== 'to_order'"
+                  size="xs"
+                  variant="ghost"
+                  color="neutral"
+                  icon="i-lucide-receipt"
+                  title="Shipping & payment details"
+                  @click="openDetails(order)"
+                />
+                <UButton
+                  size="xs"
+                  variant="ghost"
+                  color="neutral"
+                  icon="i-lucide-plus"
+                  @click="openAddToOrder(order)"
+                />
+                <UButton
+                  size="xs"
+                  variant="ghost"
+                  color="error"
+                  icon="i-lucide-trash-2"
+                  :loading="isOrderDeleting(order.id)"
+                  @click="deleteOrder(order)"
+                />
+              </div>
             </div>
-          </template>
-        </UTable>
+
+            <div
+              v-if="orderHasDetails(order)"
+              class="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-gray-200/70 px-3 py-2 text-xs text-gray-500 dark:border-gray-800/70"
+            >
+              <a
+                v-if="order.trackingNumber"
+                :href="carrierTrackingUrl(order.trackingCarrier, order.trackingNumber)!"
+                target="_blank"
+                class="inline-flex items-center gap-1 text-primary-500 hover:underline"
+              >
+                <UIcon name="i-lucide-truck" />
+                {{ order.trackingCarrier ? order.trackingCarrier + " " : "" }}{{ order.trackingNumber }}
+                <UIcon name="i-lucide-external-link" />
+              </a>
+              <span v-if="order.shippingCents != null" class="inline-flex items-center gap-1">
+                <UIcon name="i-lucide-package" />
+                Shipping {{ formatCurrencyFromCents(order.shippingCents) }}
+              </span>
+              <span v-if="order.taxCents != null" class="inline-flex items-center gap-1">
+                <UIcon name="i-lucide-receipt" />
+                Tax {{ formatCurrencyFromCents(order.taxCents) }}
+              </span>
+              <span
+                v-for="p in order.payments"
+                :key="p.id"
+                class="inline-flex items-center gap-1"
+              >
+                <UIcon name="i-lucide-credit-card" />
+                {{ p.label }} · {{ formatCurrencyFromCents(p.amountCents) }}
+              </span>
+            </div>
+
+            <table class="w-full text-sm">
+              <tbody>
+                <tr
+                  v-for="item in order.items"
+                  :key="item.id"
+                  draggable="true"
+                  class="cursor-grab border-b border-gray-100 last:border-0 active:cursor-grabbing dark:border-gray-900"
+                  @dragstart.stop="onTablePartDragStart($event, order, item)"
+                  @dragend="onPartDragEnd"
+                >
+                  <td class="p-2">
+                    <p class="font-medium text-gray-900 dark:text-white">
+                      {{ item.partName }}
+                    </p>
+                    <p
+                      v-if="item.variantTitle || item.variantId"
+                      class="text-xs text-gray-500"
+                    >
+                      {{ item.variantTitle ?? item.variantId }}
+                    </p>
+                  </td>
+                  <td class="p-2 text-center text-gray-500">x{{ item.quantity }}</td>
+                  <td class="p-2 text-right text-gray-500">
+                    {{ formatCurrencyFromCents(item.unitPriceCents) ?? "--" }}
+                  </td>
+                  <td class="p-2 text-right font-medium">
+                    {{
+                      formatCurrencyFromCents(
+                        (item.unitPriceCents ?? 0) * item.quantity,
+                      ) ?? "--"
+                    }}
+                  </td>
+                  <td class="p-2">
+                    <div class="flex justify-end gap-1">
+                      <UButton
+                        v-if="item.externalUrl"
+                        size="xs"
+                        variant="ghost"
+                        color="primary"
+                        icon="i-lucide-external-link"
+                        :to="item.externalUrl"
+                        target="_blank"
+                        title="Order from vendor"
+                      />
+                      <UButton
+                        v-if="order.status === 'to_order' && order.items.length > 1"
+                        size="xs"
+                        variant="ghost"
+                        color="neutral"
+                        icon="i-lucide-split"
+                        title="Split into its own order"
+                        @click="splitPartOut(order.id, item.id)"
+                      />
+                      <UButton
+                        size="xs"
+                        variant="ghost"
+                        color="neutral"
+                        icon="i-lucide-pencil"
+                        @click="onEditItem({ order, item })"
+                      />
+                      <UButton
+                        size="xs"
+                        variant="ghost"
+                        color="error"
+                        icon="i-lucide-trash-2"
+                        @click="onDeleteItem({ order, item })"
+                      />
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <div
@@ -488,186 +416,101 @@
           No orders yet
         </h3>
         <p class="mx-auto mt-1 max-w-lg text-sm text-gray-500">
-          Start your purchasing pipeline by adding the first part request for
-          your organization.
+          Add your first part — it'll group into a per-vendor order automatically.
         </p>
         <div class="mt-6">
           <UButton icon="i-lucide-plus" @click="() => openCreateEditor()">
-            Create order
+            Add part
           </UButton>
         </div>
       </div>
     </UContainer>
+
     <OrderEditorSlideover
       v-model:open="isEditorOpen"
       :mode="editorMode"
-      :initial-order="editorOrder"
+      :initial-item="editorItem"
       :initial-url="editorInitialUrl"
+      :hide-vendor="editorTargetOrderId !== null"
       :loading="isEditorSubmitting"
       :available-tags="availableTags"
       @submit="handleEditorSubmit"
+    />
+
+    <OrderDetailsSlideover
+      v-model:open="isDetailsOpen"
+      :order="detailsOrder"
+      :loading="isDetailsSubmitting"
+      :payment-methods="paymentMethods"
+      @submit="handleDetailsSubmit"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { TinyColor } from "@ctrl/tinycolor";
 import { computed, ref, watch, watchEffect, onMounted } from "vue";
-import type { TableColumn } from "#ui/types";
 import type {
   Order,
+  OrderItem,
+  OrderDetailsValues,
   OrderEditorSubmitPayload,
   OrderEditorValues,
+  OrderStatus,
   Tag,
 } from "~/types/orders";
 import { LazyDashboardImport } from "#components";
+import { carrierTrackingUrl } from "~/utils/tracking";
 
-definePageMeta({
-  layout: "app",
-});
+definePageMeta({ layout: "app" });
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuth();
 const orgs = useOrgs();
-
 const toast = useToast();
 const overlay = useOverlay();
-
 const importModal = overlay.create(LazyDashboardImport);
 
 const statuses = [
   {
     key: "to_order",
     label: "To order",
-    pastTense: "requested",
-    description: "Parts requests - awaiting purchase",
-    color: "primary",
+    description: "Parts to purchase",
+    color: "primary" as const,
   },
   {
     key: "ordered",
     label: "Ordered",
-    pastTense: "ordered",
-    description: "Placed orders - awaiting arrival",
-    color: "warning",
+    description: "Placed - awaiting arrival",
+    color: "warning" as const,
   },
   {
     key: "arrived",
     label: "Arrived",
-    pastTense: "arrived",
-    description: "Items received",
-    color: "success",
+    description: "Received",
+    color: "success" as const,
   },
 ] as const;
 
-type StatusKey = (typeof statuses)[number]["key"];
+const statusSequence: OrderStatus[] = ["to_order", "ordered", "arrived"];
 
-const statusLookup = Object.fromEntries(
-  statuses.map((status) => [status.key, status]),
-) as Record<StatusKey, (typeof statuses)[number]>;
+function statusLabel(key: OrderStatus) {
+  return statuses.find((s) => s.key === key)?.label ?? key;
+}
+function statusColor(key: OrderStatus) {
+  return statuses.find((s) => s.key === key)?.color ?? "neutral";
+}
+function nextStatus(status: OrderStatus): OrderStatus | null {
+  const idx = statusSequence.indexOf(status);
+  return idx === -1 ? null : (statusSequence[idx + 1] ?? null);
+}
 
 const viewOptions = ref([
-  {
-    value: "board",
-    label: "Board",
-    icon: "i-lucide-layout-dashboard",
-  },
-  {
-    value: "table",
-    label: "Table",
-    icon: "i-lucide-table",
-  },
+  { value: "board", label: "Board", icon: "i-lucide-layout-dashboard" },
+  { value: "table", label: "Table", icon: "i-lucide-table" },
 ]);
-
-type ViewMode = (typeof viewOptions)["value"][number]["value"];
-
+type ViewMode = "board" | "table";
 const viewMode = ref<ViewMode>("board");
-
-function vendorKeyForOrder(order: Pick<Order, "vendorId" | "vendorName">) {
-  if (order.vendorId) {
-    return `id:${order.vendorId}`;
-  }
-  const name = order.vendorName?.trim();
-  if (name && name.length > 0) {
-    return `manual:${name.toLocaleLowerCase()}`;
-  }
-  return "";
-}
-
-function vendorLabelForOrder(order: Pick<Order, "vendorId" | "vendorName">) {
-  return order.vendorName?.trim() ?? order.vendorId ?? "Unknown vendor";
-}
-
-type OrderTableRow = Order & {
-  actions: string;
-  vendorKey: string;
-};
-
-const orderTableColumns: TableColumn<OrderTableRow>[] = [
-  { accessorKey: "partName", header: "Part" },
-  {
-    accessorKey: "status",
-    header: "Status",
-    cell: ({ row }) => {
-      const status = statusLookup[row.original.status];
-      return status ? status.label : row.original.status;
-    },
-  },
-  {
-    accessorKey: "tags",
-    header: "Tags",
-  },
-  { accessorKey: "quantity", header: "Qty" },
-  { accessorKey: "unitPriceCents", header: "Unit price" },
-  {
-    header: "Total price",
-    cell: ({ row }) => {
-      const qty = row.original.quantity ?? 0;
-      const unitCents = row.original.unitPriceCents ?? 0;
-      const totalCents = qty * unitCents;
-      return totalCents > 0 ? formatCurrencyFromCents(totalCents) : "--";
-    },
-  },
-  { accessorKey: "vendorName", header: "Vendor" },
-  { accessorKey: "requestedByName", header: "Requested by" },
-  { accessorKey: "updatedAt", header: "Updated" },
-  { accessorKey: "actions", header: "" },
-];
-
-type CsvColumn = {
-  label: string;
-  getValue: (row: OrderTableRow) => string | number | null | undefined;
-};
-
-const csvExportColumns: CsvColumn[] = [
-  { label: "Part", getValue: (row) => row.partName },
-  { label: "Description", getValue: (row) => row.description ?? "" },
-  {
-    label: "Status",
-    getValue: (row) =>
-      statusLookup[row.status as StatusKey]?.label ?? row.status,
-  },
-  { label: "Quantity", getValue: (row) => row.quantity ?? "" },
-  {
-    label: "Unit Price (USD)",
-    getValue: (row) =>
-      row.unitPriceCents === undefined || row.unitPriceCents === null
-        ? ""
-        : (row.unitPriceCents / 100).toFixed(2),
-  },
-  {
-    label: "Vendor",
-    getValue: (row) => row.vendorName ?? row.vendorId ?? "",
-  },
-  {
-    label: "Requested By",
-    getValue: (row) => row.requestedByName ?? row.requestedBy ?? "",
-  },
-  { label: "Ordered At", getValue: (row) => row.orderedAt ?? "" },
-  { label: "Arrived At", getValue: (row) => row.arrivedAt ?? "" },
-  { label: "Updated At", getValue: (row) => row.updatedAt ?? "" },
-  { label: "External URL", getValue: (row) => row.externalUrl ?? "" },
-];
 
 const {
   data: ordersData,
@@ -682,87 +525,111 @@ await suspense();
 const { data: tagsData } = await useFetch("/api/tags", {
   watch: [() => orgs.organization.value?.id],
 });
-
 const availableTags = computed<Tag[]>(
   () => (tagsData.value as { tags: Tag[] } | null)?.tags ?? [],
 );
 
-const ordersState = ref<Order[]>([]);
+// Payment labels used before (e.g. saved credit cards) for reuse suggestions.
+const { data: paymentMethodsData, refresh: refreshPaymentMethods } =
+  await useFetch("/api/orders/payment-methods", {
+    watch: [() => orgs.organization.value?.id],
+  });
+const paymentMethods = computed<{ type: string; label: string }[]>(
+  () =>
+    (paymentMethodsData.value as {
+      methods: { type: string; label: string }[];
+    } | null)?.methods ?? [],
+);
 
+const ordersState = ref<Order[]>([]);
 watch(
   () => ordersData.value,
-  (newOrders) => {
-    if (newOrders) {
-      ordersState.value = [...newOrders];
-    }
+  (next) => {
+    if (next) ordersState.value = [...next];
   },
   { immediate: true },
 );
 
+// --- filters --------------------------------------------------------------
 const startDate = ref<string | null>(null);
 const endDate = ref<string | null>(null);
 const vendorFilter = ref<string>("");
-const statusFilter = ref<StatusKey | undefined>(undefined);
+const statusFilter = ref<OrderStatus | undefined>(undefined);
 const tagFilter = ref<string>("");
 
-const vendorsForFilter = computed(() => {
-  const map = new Map<string, { id: string; name: string }>();
-  for (const o of ordersState.value) {
-    const key = vendorKeyForOrder(o);
-    if (!key) continue;
-    if (!map.has(key)) {
-      map.set(key, { id: key, name: vendorLabelForOrder(o) });
-    }
-  }
-  return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-});
+function vendorKeyForOrder(order: Order) {
+  if (order.vendorId) return `id:${order.vendorId}`;
+  const name = order.vendorName?.trim();
+  return name ? `manual:${name.toLocaleLowerCase()}` : "none";
+}
 
-const vendorOptions = computed(() =>
-  vendorsForFilter.value.map((v) => ({ label: v.name, value: v.id })),
-);
+const vendorOptions = computed(() => {
+  const map = new Map<string, string>();
+  for (const o of ordersState.value) {
+    map.set(vendorKeyForOrder(o), o.vendorName?.trim() || "No vendor");
+  }
+  return Array.from(map.entries())
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+});
 
 const tagOptions = computed(() =>
   availableTags.value.map((t) => ({ label: t.name, value: t.id })),
 );
 
-function parseISODate(value?: string | null) {
+function parseISODate(value?: string | Date | null) {
   if (!value) return null;
   const d = new Date(value);
   return isNaN(d.getTime()) ? null : d;
 }
 
-const filteredTableRows = computed(() => {
-  return tableRows.value.filter((row) => {
-    if (vendorFilter.value && row.vendorKey !== vendorFilter.value)
+const filteredOrders = computed(() =>
+  ordersState.value.filter((order) => {
+    if (statusFilter.value && order.status !== statusFilter.value) return false;
+    if (vendorFilter.value && vendorKeyForOrder(order) !== vendorFilter.value)
       return false;
-    if (statusFilter.value && row.status != statusFilter.value) return false;
-    if (tagFilter.value && !row.tags?.some((t) => t.id === tagFilter.value))
+    if (
+      tagFilter.value &&
+      !order.items.some((it) => it.tags?.some((t) => t.id === tagFilter.value))
+    )
       return false;
-    const date = parseISODate(row.orderedAt ?? row.createdAt);
-    if (!date) return true;
-    if (startDate.value) {
-      const s = new Date(startDate.value + "T00:00:00");
-      if (date < s) return false;
-    }
-    if (endDate.value) {
-      const e = new Date(endDate.value + "T23:59:59");
-      if (date > e) return false;
+    const date = parseISODate(order.orderedAt ?? order.createdAt);
+    if (date) {
+      if (startDate.value && date < new Date(startDate.value + "T00:00:00"))
+        return false;
+      if (endDate.value && date > new Date(endDate.value + "T23:59:59"))
+        return false;
     }
     return true;
-  });
-});
+  }),
+);
 
-const totalSpentCents = computed(() => {
-  return filteredTableRows.value.reduce((sum, row) => {
-    const cents = row.unitPriceCents ?? null;
-    if (cents === null || cents === undefined) return sum;
-    return sum + cents * (row.quantity ?? 0);
-  }, 0);
-});
+const grandTotalCents = computed(() =>
+  filteredOrders.value.reduce((sum, o) => sum + o.grandTotalCents, 0),
+);
 
-const filteredCount = computed(() => filteredTableRows.value.length);
+function orderHasDetails(o: Order) {
+  return (
+    !!o.trackingNumber ||
+    o.shippingCents != null ||
+    o.taxCents != null ||
+    (o.payments?.length ?? 0) > 0
+  );
+}
+const filteredItemCount = computed(() =>
+  filteredOrders.value.reduce((sum, o) => sum + o.itemCount, 0),
+);
 
-const isExportingCsv = ref(false);
+const boardColumns = computed(() =>
+  statuses.map((status) => {
+    const orders = filteredOrders.value.filter((o) => o.status === status.key);
+    return {
+      ...status,
+      orders,
+      totalCents: orders.reduce((sum, o) => sum + o.grandTotalCents, 0),
+    };
+  }),
+);
 
 function clearFilters() {
   startDate.value = null;
@@ -772,48 +639,99 @@ function clearFilters() {
   tagFilter.value = "";
 }
 
-const statusSequence: StatusKey[] = statuses.map((status) => status.key);
+// --- in-flight state ------------------------------------------------------
+const updatingIds = ref<Set<string>>(new Set());
+const deletingIds = ref<Set<string>>(new Set());
+const isOrderUpdating = (id: string) => updatingIds.value.has(id);
+const isOrderDeleting = (id: string) => deletingIds.value.has(id);
+function setBusy(set: typeof updatingIds, id: string, value: boolean) {
+  const next = new Set(set.value);
+  if (value) next.add(id);
+  else next.delete(id);
+  set.value = next;
+}
 
-const boardColumns = computed(() =>
-  statuses.map((status) => ({
-    ...status,
-    items: ordersState.value.filter((order) => order.status === status.key),
-  })),
-);
+function upsertOrder(order: Order | null | undefined) {
+  if (!order) return;
+  const idx = ordersState.value.findIndex((o) => o.id === order.id);
+  if (idx === -1) ordersState.value = [order, ...ordersState.value];
+  else {
+    const next = [...ordersState.value];
+    next.splice(idx, 1, order);
+    ordersState.value = next;
+  }
+}
+function removeOrder(id: string) {
+  ordersState.value = ordersState.value.filter((o) => o.id !== id);
+}
 
-const tableRows = computed<OrderTableRow[]>(() =>
-  ordersState.value.map((order) => ({
-    ...order,
-    actions: order.id,
-    vendorKey: vendorKeyForOrder(order),
-  })),
-);
-
-const dropTarget = ref<StatusKey | null>(null);
-const draggingId = ref<string | null>(null);
-const updatingIds = ref<string[]>([]);
-const deletingIds = ref<string[]>([]);
-
+// --- editor ---------------------------------------------------------------
 const isEditorOpen = ref(false);
 const editorMode = ref<"create" | "edit">("create");
-const editorOrder = ref<Order | null>(null);
+const editorItem = ref<(OrderItem & { orderId: string }) | null>(null);
 const editorInitialUrl = ref<string | null>(null);
+const editorTargetOrderId = ref<string | null>(null);
 const isEditorSubmitting = ref(false);
 
 function openCreateEditor(initialUrl?: string) {
   editorMode.value = "create";
-  editorOrder.value = null;
+  editorItem.value = null;
+  editorTargetOrderId.value = null;
   editorInitialUrl.value = initialUrl ?? null;
-  isEditorSubmitting.value = false;
+  isEditorOpen.value = true;
+}
+function openAddToOrder(order: Order) {
+  editorMode.value = "create";
+  editorItem.value = null;
+  editorTargetOrderId.value = order.id;
+  editorInitialUrl.value = null;
+  isEditorOpen.value = true;
+}
+function onEditItem({ order, item }: { order: Order; item: OrderItem }) {
+  editorMode.value = "edit";
+  editorItem.value = { ...item, orderId: order.id };
+  editorTargetOrderId.value = order.id;
+  editorInitialUrl.value = null;
   isEditorOpen.value = true;
 }
 
-function openEditEditor(order: Order) {
-  editorMode.value = "edit";
-  editorOrder.value = { ...order };
-  editorInitialUrl.value = null;
-  isEditorSubmitting.value = false;
-  isEditorOpen.value = true;
+// --- order details (tracking / shipping / payments) -----------------------
+const isDetailsOpen = ref(false);
+const isDetailsSubmitting = ref(false);
+const detailsOrder = ref<Order | null>(null);
+
+function openDetails(order: Order) {
+  detailsOrder.value = order;
+  isDetailsOpen.value = true;
+}
+
+async function handleDetailsSubmit({
+  orderId,
+  values,
+}: {
+  orderId: string;
+  values: OrderDetailsValues;
+}) {
+  isDetailsSubmitting.value = true;
+  try {
+    const { order } = await $fetch<{ order: Order }>(
+      `/api/orders/${orderId}/details`,
+      { method: "PATCH", body: values },
+    );
+    upsertOrder(order);
+    isDetailsOpen.value = false;
+    // Pick up any newly-used payment labels for next time's suggestions.
+    refreshPaymentMethods();
+    toast.add({
+      title: "Order details saved",
+      color: "success",
+      icon: "i-lucide-check-circle",
+    });
+  } catch (err) {
+    notifyError("Unable to save order details", err);
+  } finally {
+    isDetailsSubmitting.value = false;
+  }
 }
 
 onMounted(() => {
@@ -824,309 +742,377 @@ onMounted(() => {
   }
 });
 
-type ErrorWithStatusMessage = {
-  data?: {
-    statusMessage?: string;
-  };
-  statusMessage?: string;
-  message?: string;
-};
-
-function hasStatusMessagePayload(err: unknown): err is ErrorWithStatusMessage {
-  if (!err || typeof err !== "object") return false;
-  const candidate = err as Partial<ErrorWithStatusMessage>;
-  return Boolean(
-    candidate.statusMessage || candidate.message || candidate.data,
-  );
-}
-
-function extractErrorMessage(err: unknown) {
-  if (hasStatusMessagePayload(err)) {
-    if (err.data?.statusMessage) return err.data.statusMessage;
-    if (err.statusMessage) return err.statusMessage;
-    if (err.message) return err.message;
-  }
-  if (typeof err === "string") return err;
-  if (err instanceof Error) return err.message;
-  return "Something went wrong. Please try again.";
-}
-
-function setUpdating(id: string, value: boolean) {
-  if (value) {
-    if (!updatingIds.value.includes(id)) {
-      updatingIds.value = [...updatingIds.value, id];
-    }
-  } else {
-    updatingIds.value = updatingIds.value.filter((existing) => existing !== id);
-  }
-}
-
-function setDeleting(id: string, value: boolean) {
-  if (value) {
-    if (!deletingIds.value.includes(id)) {
-      deletingIds.value = [...deletingIds.value, id];
-    }
-  } else {
-    deletingIds.value = deletingIds.value.filter((existing) => existing !== id);
-  }
-}
-
-const isOrderUpdating = (id: string) => updatingIds.value.includes(id);
-const isOrderDeleting = (id: string) => deletingIds.value.includes(id);
-
-function upsertOrder(order: Order) {
-  const index = ordersState.value.findIndex((item) => item.id === order.id);
-  if (index === -1) {
-    ordersState.value = [order, ...ordersState.value];
-  } else {
-    const next = [...ordersState.value];
-    next.splice(index, 1, order);
-    ordersState.value = next;
-  }
-}
-
-async function createOrderFromEditor(
-  values: OrderEditorValues,
-): Promise<boolean> {
-  try {
-    const response = await $fetch<{ order: Order }>("/api/orders", {
-      method: "POST",
-      body: values,
-    });
-
-    upsertOrder(response.order);
-    toast.add({
-      title: "Order created",
-      color: "success",
-      icon: "i-lucide-check-circle",
-    });
-    return true;
-  } catch (err) {
-    toast.add({
-      title: "Unable to create order",
-      description: extractErrorMessage(err),
-      color: "error",
-      icon: "i-lucide-alert-triangle",
-    });
-    return false;
-  }
-}
-
-async function updateOrderFromEditor(
-  orderId: string,
-  values: OrderEditorValues,
-): Promise<boolean> {
-  try {
-    const response = await $fetch<{ order: Order }>(`/api/orders/${orderId}`, {
-      method: "PATCH",
-      body: values,
-    });
-
-    upsertOrder(response.order);
-    toast.add({
-      title: "Order updated",
-      color: "success",
-      icon: "i-lucide-check-circle",
-    });
-    return true;
-  } catch (err) {
-    toast.add({
-      title: "Unable to update order",
-      description: extractErrorMessage(err),
-      color: "error",
-      icon: "i-lucide-alert-triangle",
-    });
-    return false;
-  }
-}
-
 async function handleEditorSubmit(payload: OrderEditorSubmitPayload) {
   isEditorSubmitting.value = true;
   try {
-    if (payload.mode === "create") {
-      const created = await createOrderFromEditor(payload.values);
-      if (created) {
-        isEditorOpen.value = false;
-      }
-    } else if (payload.mode === "edit" && payload.orderId) {
-      const updated = await updateOrderFromEditor(
-        payload.orderId,
-        payload.values,
-      );
-      if (updated) {
-        isEditorOpen.value = false;
-      }
+    let ok = false;
+    if (payload.mode === "edit" && payload.orderId && payload.itemId) {
+      ok = await editPart(payload.orderId, payload.itemId, payload.values);
+    } else if (editorTargetOrderId.value) {
+      ok = await addPartToOrder(editorTargetOrderId.value, payload.values);
+    } else {
+      ok = await createPart(payload.values);
     }
+    if (ok) isEditorOpen.value = false;
   } finally {
     isEditorSubmitting.value = false;
   }
 }
 
-async function updateOrderStatus(orderId: string, status: StatusKey) {
-  const order = ordersState.value.find((item) => item.id === orderId);
-  if (!order || order.status === status) return;
-
-  setUpdating(orderId, true);
+// --- mutations ------------------------------------------------------------
+async function createPart(values: OrderEditorValues): Promise<boolean> {
   try {
-    const response = await $fetch<{ order: Order }>(`/api/orders/${orderId}`, {
-      method: "PATCH",
-      body: { status },
+    const { order } = await $fetch<{ order: Order }>("/api/orders", {
+      method: "POST",
+      body: values,
     });
-
-    upsertOrder(response.order);
-    toast.add({
-      title: "Order updated",
-      color: "success",
-      icon: "i-lucide-check-circle",
-    });
+    upsertOrder(order);
+    toast.add({ title: "Part added", color: "success", icon: "i-lucide-check-circle" });
+    return true;
   } catch (err) {
-    toast.add({
-      title: "Unable to update order",
-      description: extractErrorMessage(err),
-      color: "error",
-      icon: "i-lucide-alert-triangle",
-    });
-  } finally {
-    setUpdating(orderId, false);
+    notifyError("Unable to add part", err);
+    return false;
   }
 }
 
-function getNextStatus(status: StatusKey): StatusKey | null {
-  const index = statusSequence.indexOf(status);
-  if (index === -1) return null;
-  return statusSequence[index + 1] ?? null;
+async function addPartToOrder(
+  orderId: string,
+  values: OrderEditorValues,
+): Promise<boolean> {
+  try {
+    const { order } = await $fetch<{ order: Order }>(
+      `/api/orders/${orderId}/items`,
+      { method: "POST", body: values },
+    );
+    upsertOrder(order);
+    toast.add({ title: "Part added", color: "success", icon: "i-lucide-check-circle" });
+    return true;
+  } catch (err) {
+    notifyError("Unable to add part", err);
+    return false;
+  }
 }
 
-async function advanceStatus(order: Order) {
-  const next = getNextStatus(order.status);
-  if (!next) return;
-  await updateOrderStatus(order.id, next);
+async function editPart(
+  orderId: string,
+  itemId: string,
+  values: OrderEditorValues,
+): Promise<boolean> {
+  try {
+    const { order } = await $fetch<{ order: Order }>(
+      `/api/orders/${orderId}/items/${itemId}`,
+      { method: "PATCH", body: values },
+    );
+    upsertOrder(order);
+    toast.add({ title: "Part updated", color: "success", icon: "i-lucide-check-circle" });
+    return true;
+  } catch (err) {
+    notifyError("Unable to update part", err);
+    return false;
+  }
 }
 
-function onDragStart(orderId: string) {
-  draggingId.value = orderId;
+async function onDeleteItem({ order, item }: { order: Order; item: OrderItem }) {
+  setBusy(updatingIds, order.id, true);
+  try {
+    const { order: updated } = await $fetch<{ order: Order | null }>(
+      `/api/orders/${order.id}/items/${item.id}`,
+      { method: "DELETE" },
+    );
+    if (updated) upsertOrder(updated);
+    else removeOrder(order.id);
+    toast.add({ title: "Part removed", color: "success", icon: "i-lucide-trash-2" });
+  } catch (err) {
+    notifyError("Unable to remove part", err);
+  } finally {
+    setBusy(updatingIds, order.id, false);
+  }
 }
 
+async function setOrderStatus(orderId: string, status: OrderStatus) {
+  const order = ordersState.value.find((o) => o.id === orderId);
+  if (!order || order.status === status) return;
+  setBusy(updatingIds, orderId, true);
+  try {
+    const { order: updated } = await $fetch<{ order: Order }>(
+      `/api/orders/${orderId}`,
+      { method: "PATCH", body: { status } },
+    );
+    upsertOrder(updated);
+  } catch (err) {
+    notifyError("Unable to update order", err);
+  } finally {
+    setBusy(updatingIds, orderId, false);
+  }
+}
+
+async function advanceOrder(order: Order) {
+  const next = nextStatus(order.status);
+  if (next) await setOrderStatus(order.id, next);
+}
+
+async function deleteOrder(order: Order) {
+  setBusy(deletingIds, order.id, true);
+  try {
+    await $fetch(`/api/orders/${order.id}`, { method: "DELETE" });
+    removeOrder(order.id);
+    toast.add({ title: "Order removed", color: "success", icon: "i-lucide-trash-2" });
+  } catch (err) {
+    notifyError("Unable to remove order", err);
+  } finally {
+    setBusy(deletingIds, order.id, false);
+  }
+}
+
+async function doSplit(orderId: string, itemIds: string[]) {
+  setBusy(updatingIds, orderId, true);
+  try {
+    const { source, created } = await $fetch<{
+      source: Order | null;
+      created: Order | null;
+    }>("/api/orders/split", {
+      method: "POST",
+      body: { orderId, itemIds },
+    });
+    if (source) upsertOrder(source);
+    else removeOrder(orderId);
+    upsertOrder(created);
+    toast.add({
+      title: "Split into a new order",
+      color: "success",
+      icon: "i-lucide-split",
+    });
+  } catch (err) {
+    notifyError("Unable to split order", err);
+  } finally {
+    setBusy(updatingIds, orderId, false);
+  }
+}
+
+// Separate one part into its own new order — from dragging into empty space
+// (board) or the split button (table). No-op if it's the order's only part.
+async function splitPartOut(orderId: string, itemId: string) {
+  const src = ordersState.value.find((o) => o.id === orderId);
+  if (!src || src.status !== "to_order" || src.items.length <= 1) return;
+  await doSplit(orderId, [itemId]);
+}
+
+// --- drag a part into another open order ("join") -------------------------
+const draggingPart = ref<{ orderId: string; itemId: string } | null>(null);
+const dropOrderTarget = ref<string | null>(null);
+
+function onPartDragStart({ order, item }: { order: Order; item: OrderItem }) {
+  draggingPart.value = { orderId: order.id, itemId: item.id };
+  draggingId.value = null; // ensure we're not also order-dragging
+}
+// Table rows carry the native event so we can prime dataTransfer here.
+function onTablePartDragStart(event: DragEvent, order: Order, item: OrderItem) {
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", item.id);
+  }
+  onPartDragStart({ order, item });
+}
+function onPartDragEnd() {
+  draggingPart.value = null;
+  dropOrderTarget.value = null;
+}
+
+function draggedSourceOrder(): Order | undefined {
+  return draggingPart.value
+    ? ordersState.value.find((o) => o.id === draggingPart.value?.orderId)
+    : undefined;
+}
+
+// Parts can only be combined between two open orders of the SAME vendor.
+function isMoveTarget(order: Order) {
+  const src = draggedSourceOrder();
+  return (
+    !!draggingPart.value &&
+    !!src &&
+    src.status === "to_order" &&
+    order.status === "to_order" &&
+    order.id !== draggingPart.value.orderId &&
+    vendorKeyForOrder(src) === vendorKeyForOrder(order)
+  );
+}
+
+function onCardDragOver(event: DragEvent, order: Order) {
+  if (!isMoveTarget(order)) return;
+  event.preventDefault(); // allow drop
+  dropOrderTarget.value = order.id;
+}
+function onCardDragLeave(order: Order) {
+  if (dropOrderTarget.value === order.id) dropOrderTarget.value = null;
+}
+async function onCardDrop(event: DragEvent, order: Order) {
+  if (!draggingPart.value) return; // order drags bubble to the column
+  // A drop on a card is a join (or a no-op) — never a split-out, so stop it
+  // from reaching the column's drop handler.
+  event.stopPropagation();
+  const src = draggedSourceOrder();
+  const dp = draggingPart.value;
+  draggingPart.value = null;
+  dropOrderTarget.value = null;
+  if (!src || src.id === order.id) return;
+  if (src.status !== "to_order" || order.status !== "to_order") {
+    toast.add({
+      title: "Only parts in a “To order” order can be combined",
+      color: "warning",
+      icon: "i-lucide-info",
+    });
+    return;
+  }
+  if (vendorKeyForOrder(src) !== vendorKeyForOrder(order)) {
+    toast.add({
+      title: "Parts can only be combined within the same vendor",
+      color: "warning",
+      icon: "i-lucide-info",
+    });
+    return;
+  }
+  await movePart(dp.itemId, order.id, dp.orderId);
+}
+
+async function movePart(
+  itemId: string,
+  targetOrderId: string,
+  sourceOrderId: string,
+) {
+  setBusy(updatingIds, targetOrderId, true);
+  setBusy(updatingIds, sourceOrderId, true);
+  try {
+    const { orders, removedOrderIds } = await $fetch<{
+      orders: Order[];
+      removedOrderIds: string[];
+    }>("/api/orders/move", {
+      method: "POST",
+      body: { targetOrderId, itemIds: [itemId] },
+    });
+    for (const id of removedOrderIds) removeOrder(id);
+    for (const order of orders) upsertOrder(order);
+    toast.add({
+      title: "Part moved",
+      color: "success",
+      icon: "i-lucide-corner-up-right",
+    });
+  } catch (err) {
+    notifyError("Unable to move part", err);
+  } finally {
+    setBusy(updatingIds, targetOrderId, false);
+    setBusy(updatingIds, sourceOrderId, false);
+  }
+}
+
+// --- board drag (whole order between status columns) ----------------------
+const dropTarget = ref<OrderStatus | null>(null);
+const draggingId = ref<string | null>(null);
+function onDragStart(id: string) {
+  draggingId.value = id;
+}
 function onDragEnd() {
   draggingId.value = null;
   dropTarget.value = null;
 }
-
-async function onDrop(status: StatusKey) {
-  if (!draggingId.value) return;
+async function onDrop(status: OrderStatus) {
+  // A part dropped on the "To order" column's empty space splits out into its
+  // own new order.
+  if (draggingPart.value) {
+    const dp = draggingPart.value;
+    draggingPart.value = null;
+    dropTarget.value = null;
+    dropOrderTarget.value = null;
+    if (status !== "to_order") return;
+    const src = ordersState.value.find((o) => o.id === dp.orderId);
+    if (src && src.status !== "to_order") {
+      toast.add({
+        title: "Only parts in a “To order” order can be split out",
+        color: "warning",
+        icon: "i-lucide-info",
+      });
+      return;
+    }
+    await splitPartOut(dp.orderId, dp.itemId);
+    return;
+  }
   const id = draggingId.value;
   draggingId.value = null;
   dropTarget.value = null;
-  await updateOrderStatus(id, status);
+  if (id) await setOrderStatus(id, status);
 }
-
-function onDragOver(status: StatusKey) {
+function onDragOver(status: OrderStatus) {
+  if (!draggingId.value) return; // ignore while dragging a part
   dropTarget.value = status;
 }
-
-function onDragLeave(status: StatusKey) {
-  if (dropTarget.value === status) {
-    dropTarget.value = null;
-  }
+function onDragLeave(status: OrderStatus) {
+  if (dropTarget.value === status) dropTarget.value = null;
 }
 
-async function deleteOrder(order: Pick<Order, "id">) {
-  setDeleting(order.id, true);
-  try {
-    await $fetch(`/api/orders/${order.id}`, { method: "DELETE" });
-    ordersState.value = ordersState.value.filter(
-      (item) => item.id !== order.id,
-    );
-    toast.add({
-      title: "Order removed",
-      color: "success",
-      icon: "i-lucide-trash-2",
-    });
-  } catch (err) {
-    toast.add({
-      title: "Unable to remove order",
-      description: extractErrorMessage(err),
-      color: "error",
-      icon: "i-lucide-alert-triangle",
-    });
-  } finally {
-    setDeleting(order.id, false);
-  }
-}
-
+// --- misc -----------------------------------------------------------------
 async function refreshOrders() {
   await refetch();
 }
-
 async function handleImportClick() {
   const instance = importModal.open();
   await instance.result;
   await refreshOrders();
 }
 
-function escapeCsvValue(value: string | number | null | undefined) {
-  const raw = value ?? "";
-  const stringValue = typeof raw === "string" ? raw : String(raw);
-  if (/[",\r\n]/.test(stringValue)) {
-    return '"' + stringValue.replace(/"/g, '""') + '"';
-  }
-  return stringValue;
-}
+const isExportingCsv = ref(false);
+const csvColumns: { label: string; get: (o: Order, i: OrderItem) => string }[] = [
+  { label: "Vendor", get: (o) => o.vendorName ?? "" },
+  { label: "Order Status", get: (o) => statusLabel(o.status) },
+  { label: "Part", get: (_o, i) => i.partName },
+  { label: "Quantity", get: (_o, i) => String(i.quantity) },
+  {
+    label: "Unit Price (USD)",
+    get: (_o, i) =>
+      i.unitPriceCents == null ? "" : (i.unitPriceCents / 100).toFixed(2),
+  },
+  {
+    label: "Line Total (USD)",
+    get: (_o, i) =>
+      i.unitPriceCents == null
+        ? ""
+        : ((i.unitPriceCents * i.quantity) / 100).toFixed(2),
+  },
+  { label: "Variant", get: (_o, i) => i.variantTitle ?? i.variantId ?? "" },
+  { label: "Requested By", get: (_o, i) => i.requestedByName ?? "" },
+  { label: "External URL", get: (_o, i) => i.externalUrl ?? "" },
+];
 
-function buildCsvContent(rows: OrderTableRow[]) {
-  const header = csvExportColumns.map((column) => column.label).join(",");
-  const dataLines = rows.map((row) =>
-    csvExportColumns
-      .map((column) => escapeCsvValue(column.getValue(row)))
-      .join(","),
-  );
-  return [header, ...dataLines].join("\r\n");
+function escapeCsv(value: string) {
+  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
 async function exportOrdersCsv() {
-  if (filteredTableRows.value.length === 0) return;
-  if (typeof window === "undefined") return;
-
+  if (filteredOrders.value.length === 0 || typeof window === "undefined") return;
   isExportingCsv.value = true;
   try {
-    const csvContent = buildCsvContent(filteredTableRows.value);
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const header = csvColumns.map((c) => c.label).join(",");
+    const lines: string[] = [];
+    for (const order of filteredOrders.value) {
+      for (const item of order.items) {
+        lines.push(
+          csvColumns.map((c) => escapeCsv(c.get(order, item))).join(","),
+        );
+      }
+    }
+    const blob = new Blob([[header, ...lines].join("\r\n")], {
+      type: "text/csv;charset=utf-8;",
+    });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    link.download = `orders-${timestamp}.csv`;
+    link.download = `orders-${new Date().toISOString().replace(/[:.]/g, "-")}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    toast.add({
-      title: "Export ready",
-      description: `${filteredTableRows.value.length} orders downloaded`,
-      color: "success",
-      icon: "i-lucide-download",
-    });
   } catch (err) {
-    toast.add({
-      title: "Unable to export orders",
-      description: extractErrorMessage(err),
-      color: "error",
-      icon: "i-lucide-alert-triangle",
-    });
+    notifyError("Unable to export orders", err);
   } finally {
     isExportingCsv.value = false;
-  }
-}
-
-function formatDate(value: string | null | undefined) {
-  if (!value) return null;
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(value));
-  } catch {
-    return null;
   }
 }
 
@@ -1143,18 +1129,35 @@ function formatCurrencyFromCents(value?: number | null) {
   }
 }
 
+type ErrorPayload = {
+  data?: { statusMessage?: string };
+  statusMessage?: string;
+  message?: string;
+};
+function extractErrorMessage(err: unknown) {
+  const e = err as ErrorPayload | null;
+  if (e && typeof e === "object") {
+    if (e.data?.statusMessage) return e.data.statusMessage;
+    if (e.statusMessage) return e.statusMessage;
+    if (e.message) return e.message;
+  }
+  if (err instanceof Error) return err.message;
+  return "Something went wrong. Please try again.";
+}
+function notifyError(title: string, err: unknown) {
+  toast.add({
+    title,
+    description: extractErrorMessage(err),
+    color: "error",
+    icon: "i-lucide-alert-triangle",
+  });
+}
+
 const hasEmptyState = computed(
   () => !isPending.value && ordersState.value.length === 0,
 );
 
 watchEffect(() => {
-  if (auth.session.value && orgs.organization.value) {
-    refreshOrders();
-  }
+  if (auth.session.value && orgs.organization.value) refreshOrders();
 });
-
-const textColor = (colorStr: string) => {
-  const color = new TinyColor(colorStr);
-  return color.isLight() ? "text-black" : "text-white";
-};
 </script>

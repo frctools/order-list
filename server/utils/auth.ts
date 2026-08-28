@@ -3,6 +3,7 @@ import { useDB } from "./db";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { organization } from "better-auth/plugins";
 import { Resend } from "resend";
+// @ts-expect-error Vue-Email SFC has no type declaration in the server project
 import InviteEmail from "./InviteEmail.vue";
 import { render } from "@vue-email/render";
 import * as schema from "./auth-schema";

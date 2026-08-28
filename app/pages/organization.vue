@@ -582,7 +582,7 @@ import {
   type Ref,
   onServerPrefetch
 } from 'vue'
-import { z } from 'zod'
+import * as z from 'zod'
 import type { FormSubmitEvent, TableColumn } from '#ui/types'
 
 const auth = useAuth()

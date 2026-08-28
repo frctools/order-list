@@ -1,6 +1,6 @@
 import { defineEventHandler, readBody, createError } from "h3";
 import { requireOrganizationContext } from "../../utils/session";
-import { createOrderSchema, createOrder } from "../../utils/order-service";
+import { createOrderSchema, addLineItem } from "../../utils/order-service";
 import { notificationHelpers } from "../../utils/notification-helpers";
 
 export default defineEventHandler(async (event) => {
@@ -17,7 +17,8 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const order = await createOrder(parsed.data, {
+  // Adds the part to the vendor's open order (creating one if needed).
+  const order = await addLineItem(parsed.data, {
     organizationId,
     userId: user.id,
   });
@@ -26,8 +27,8 @@ export default defineEventHandler(async (event) => {
     .notifyOrderCreated(
       organizationId,
       order.id,
-      order.partName,
-      order.description,
+      parsed.data.partName,
+      parsed.data.description ?? null,
       user.id,
     )
     .catch((err) =>

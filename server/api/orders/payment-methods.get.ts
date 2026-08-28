@@ -1,9 +1,9 @@
 import { defineEventHandler } from "h3";
 import { requireOrganizationContext } from "../../utils/session";
-import { listOrders } from "../../utils/order-service";
+import { listPaymentMethods } from "../../utils/order-service";
 
 export default defineEventHandler(async (event) => {
   const { organizationId } = await requireOrganizationContext(event);
-  const orders = await listOrders(organizationId);
-  return { orders };
+  const methods = await listPaymentMethods(organizationId);
+  return { methods };
 });

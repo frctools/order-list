@@ -19,7 +19,7 @@ interface SearchHit {
   sku?: string;
   vendor?: string;
   price?: number;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface VendorProductResponse {
@@ -93,14 +93,14 @@ const csvSchema = z.object({
 const rawList = computedAsync(async () => {
   if (!value.value) return [];
   const parsed = await parseCSV(value.value);
-  return parsed as any[];
+  return parsed as unknown[];
 });
 
 const list = computed(() => {
   if (!rawList.value || rawList.value.length === 0) return [];
 
   const validRows = rawList.value
-    .map((part: any) => {
+    .map((part: unknown) => {
       const parsed = csvSchema.safeParse(part);
       if (!parsed.success) return null;
       const { partNumber, description, quantity } = parsed.data;
@@ -408,7 +408,7 @@ async function handleImport() {
   if (importedOrders.value.length === 0) return;
 
   isSubmitting.value = true;
-  const res = await $fetch("/api/orders/bulk", {
+  await $fetch("/api/orders/bulk", {
     method: "POST",
     body: { orders: importedOrders.value },
   });

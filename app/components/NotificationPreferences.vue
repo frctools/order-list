@@ -111,7 +111,7 @@ const digestTimeFormatted = computed(() => {
   return `${displayHour}:${minutes} ${ampm}`;
 });
 
-const updatePreference = async (key: string, value: any) => {
+const updatePreference = async (key: string, value: boolean | string) => {
   await updatePreferences({ [key]: value });
 };
 

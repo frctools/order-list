@@ -8,6 +8,27 @@ export type Tag = {
   color: string
 }
 
+// A per-vendor purchase order (header) with its line items + derived total.
+export type Order = InternalApi['/api/orders']['get']['orders'][number]
+
+// A single part within an order.
+export type OrderItem = Order['items'][number]
+
+// How an order was paid for (split payments).
+export type OrderPayment = Order['payments'][number]
+export type PaymentType = OrderPayment['type']
+
+// Values captured by the post-order details editor (tracking, shipping, pay).
+export type OrderDetailsValues = {
+  trackingCarrier: string | null
+  trackingNumber: string | null
+  shippingCents: number | null
+  taxCents: number | null
+  payments: { type: PaymentType, label: string, amountCents: number }[]
+}
+
+// Values captured by the line-item editor. `vendorId` only matters when
+// creating (it decides which vendor order the part groups into).
 export type OrderEditorValues = {
   partName: string
   quantity: number
@@ -22,7 +43,8 @@ export type OrderEditorValues = {
 
 export type OrderEditorSubmitPayload = {
   mode: 'create' | 'edit'
+  // Present when editing an existing line item.
   orderId: string | null
+  itemId: string | null
   values: OrderEditorValues
 }
-export type Order = InternalApi['/api/orders']['get']['orders'][number]

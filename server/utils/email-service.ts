@@ -9,7 +9,7 @@ interface EmailOptions {
   to: string;
   subject: string;
   component: Component;
-  props: Record<string, any>;
+  props: Record<string, unknown>;
   organizationId: string;
   userId: string;
   notificationType: string;
@@ -114,7 +114,9 @@ export const emailService = {
         text: entry.text,
       }));
 
-      const { data, error } = await resend.batch.send(payload as any);
+      const { data, error } = await resend.batch.send(
+        payload as Parameters<typeof resend.batch.send>[0],
+      );
 
       if (error) {
         for (const entry of prepared) {
@@ -187,7 +189,7 @@ export const emailService = {
   async getOrCreatePreferences(
     userId: string,
     organizationId: string,
-  ): Promise<any> {
+  ): Promise<typeof notificationPreferences.$inferSelect | undefined> {
     const db = useDB();
 
     let prefs = await db.query.notificationPreferences.findFirst({
@@ -224,7 +226,7 @@ export const emailService = {
     userId: string,
     organizationId: string,
     updates: Partial<typeof notificationPreferences.$inferInsert>,
-  ): Promise<any> {
+  ): Promise<typeof notificationPreferences.$inferSelect | null> {
     const db = useDB();
 
     const updated = await db
@@ -248,7 +250,7 @@ export const emailService = {
     userId: string,
     organizationId: string,
     limit: number = 20,
-  ): Promise<any[]> {
+  ): Promise<(typeof notificationLog.$inferSelect)[]> {
     const db = useDB();
 
     return db.query.notificationLog.findMany({

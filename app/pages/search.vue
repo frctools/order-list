@@ -89,7 +89,7 @@ const searchResults = computed((): SearchResultItem[] => {
 // Available vendors come from facets endpoint (includes counts)
 const availableVendors = computed(() => {
   if (!vendorFacets.value) return [];
-  return vendorFacets.value
+  return [...vendorFacets.value]
     .sort((a, b) => b.count - a.count) // Sort by count descending
     .map((facet) => ({
       label: `${facet.value} (${facet.count})`,

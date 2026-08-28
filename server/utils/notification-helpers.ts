@@ -1,8 +1,11 @@
 import { useDB } from "./db";
+import { useAuth } from "./auth";
 import { emailService } from "./email-service";
 import { member } from "./auth-schema";
 import { eq } from "drizzle-orm";
+// @ts-expect-error Vue-Email SFC has no type declaration in the server project
 import OrderCreatedEmail from "./OrderCreatedEmail.vue";
+// @ts-expect-error Vue-Email SFC has no type declaration in the server project
 import OrderStatusChangedEmail from "./OrderStatusChangedEmail.vue";
 
 export const notificationHelpers = {
