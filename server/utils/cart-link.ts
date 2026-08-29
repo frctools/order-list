@@ -1,7 +1,7 @@
 // Turn an order into a one-click cart link on the vendor's own storefront, so
 // the person placing the order doesn't have to re-find every part by hand.
 //
-// Three vendors can take a whole cart from a URL:
+// Four platforms, three of which take a whole cart from one URL:
 //   Shopify  /cart/{variantId}:{qty},...      needs the numeric variant id,
 //                                             which items rarely store — they
 //                                             hold the SKU, so it's resolved
@@ -11,6 +11,10 @@
 //   DigiKey  /classic/ordering/fastadd.aspx   needs DigiKey's own part number,
 //                                             resolved from the manufacturer
 //                                             part number through their API
+//
+// BigCommerce (REV Robotics, BaneBots) can't: it adds one product per URL and
+// ignores every multi-item form. Those orders come back as `addLinks`, a link
+// per part, which build the cart up as they're followed.
 
 import {
   amazonAsinFromUrl,
@@ -22,6 +26,12 @@ import {
   type ExtractionResult
 } from './part-extractor'
 import { fetchDigiKeyProduct } from './digikey'
+import {
+  bigCommerceAddUrl,
+  bigCommerceCartUrl,
+  fetchBigCommerceProductId,
+  BIGCOMMERCE_HOSTS
+} from './bigcommerce'
 import type { OrderRecord, OrderItemRecord } from './order-service'
 
 const SHOPIFY_VARIANT_ID = /^\d+$/
@@ -58,11 +68,24 @@ export interface CartLinkItem {
   quantity: number
 }
 
+// BigCommerce adds one product per URL, so those orders come back as a link
+// per part instead of a single cart link.
+export interface CartAddLink {
+  id: string
+  partName: string
+  quantity: number
+  url: string
+}
+
 export interface CartLinkResult {
   url: string | null
   included: CartLinkItem[]
   excluded: CartLinkItem[]
   reason: CartLinkReason
+  // Set instead of `url` when the vendor can only add one part at a time.
+  addLinks?: CartAddLink[]
+  // Where to review what's been added, for the per-part flow.
+  cartUrl?: string
 }
 
 function normalizeHost(value: string): string | null {
@@ -98,7 +121,7 @@ function resolveHost(order: OrderRecord): string | null {
   return hosts.size === 1 ? [...hosts][0]! : null
 }
 
-type CartPlatform = 'shopify' | 'amazon' | 'digikey'
+type CartPlatform = 'shopify' | 'amazon' | 'digikey' | 'bigcommerce'
 
 // FastAdd takes DigiKey part numbers and quantities straight off a URL:
 // https://forum.digikey.com/t/digikey-fastadd-.../61356
@@ -119,6 +142,12 @@ function detectPlatform(
   host: string
 ): CartPlatform | null {
   if (order.vendorType === 'amazon' || isAmazonHost(host)) return 'amazon'
+  if (
+    order.vendorType === 'bigcommerce'
+    || BIGCOMMERCE_HOSTS.some(domain => hostMatches(host, domain))
+  ) {
+    return 'bigcommerce'
+  }
   // Before the Shopify check: DigiKey product URLs also contain /products/,
   // so the path heuristic below would otherwise claim them.
   if (DIGIKEY_HOSTS.some(domain => hostMatches(host, domain))) return 'digikey'
@@ -311,6 +340,58 @@ async function buildDigiKeyCart(
   return { url: urlFor(params), included, excluded, reason: 'ok' }
 }
 
+// BigCommerce can't take a whole cart from one URL, so an order comes back as
+// a link per part. Following them in one tab builds the cart up — adds
+// accumulate in the session — which still beats searching for each part.
+async function buildBigCommerceCart(
+  order: OrderRecord,
+  host: string,
+  empty: Omit<CartLinkResult, 'reason'>,
+  signal?: AbortSignal
+): Promise<CartLinkResult> {
+  const withUrls = order.items.filter(item => item.externalUrl)
+  const excluded: CartLinkItem[] = order.items
+    .filter(item => !item.externalUrl)
+    .map(summarize)
+
+  const addLinks: CartAddLink[] = []
+  const included: CartLinkItem[] = []
+
+  for (let i = 0; i < withUrls.length; i += LOOKUP_BATCH_SIZE) {
+    const batch = withUrls.slice(i, i + LOOKUP_BATCH_SIZE)
+    const productIds = await Promise.all(
+      batch.map(item =>
+        fetchBigCommerceProductId(item.externalUrl!, signal).catch(() => null)
+      )
+    )
+    productIds.forEach((productId, index) => {
+      const item = batch[index]!
+      if (!productId) {
+        excluded.push(summarize(item))
+        return
+      }
+      addLinks.push({
+        id: item.id,
+        partName: item.partName,
+        quantity: item.quantity,
+        url: bigCommerceAddUrl(host, productId, item.quantity)
+      })
+      included.push(summarize(item))
+    })
+  }
+
+  if (addLinks.length === 0) return { ...empty, reason: 'no-variants' }
+
+  return {
+    url: null,
+    addLinks,
+    cartUrl: bigCommerceCartUrl(host),
+    included,
+    excluded,
+    reason: 'ok'
+  }
+}
+
 export async function buildCartLink(
   order: OrderRecord,
   signal?: AbortSignal
@@ -329,6 +410,9 @@ export async function buildCartLink(
   if (platform === 'amazon') return buildAmazonCart(order, host, empty)
   if (platform === 'digikey') {
     return buildDigiKeyCart(order, host, empty, signal)
+  }
+  if (platform === 'bigcommerce') {
+    return buildBigCommerceCart(order, host, empty, signal)
   }
 
   // Only parts we can't already read a variant id off of need a lookup.

@@ -45,10 +45,25 @@ function resolveHost(order: Order): string | null {
 // scheme that happens to use the same word.
 const SHOPIFY_PRODUCT_PATH = /\/products\/(?=[^/?#]*[a-z])[^/?#]+\/?$/i
 
+// Mirrors BIGCOMMERCE_HOSTS on the server. These add one part at a time, so
+// the button opens a list rather than a single cart link.
+const BIGCOMMERCE_HOSTS = /(^|\.)(revrobotics|banebots)\.com$/i
+
+export function isPerItemCartVendor(order: Order): boolean {
+  if (order.vendorType === 'bigcommerce') return true
+  const host = resolveHost(order)
+  return !!host && BIGCOMMERCE_HOSTS.test(host)
+}
+
 function hasSupportedPlatform(order: Order, host: string): boolean {
   if (/(^|\.)amazon\.[a-z]{2,3}(\.[a-z]{2})?$/i.test(host)) return true
   if (/(^|\.)digikey\.(com|ca)$/i.test(host)) return true
-  if (order.vendorType) return order.vendorType !== 'bigcommerce'
+  if (order.vendorType === 'bigcommerce' || BIGCOMMERCE_HOSTS.test(host)) {
+    return true
+  }
+  // Every platform a vendor row can name — shopify, amazon, bigcommerce — now
+  // has some route to a cart.
+  if (order.vendorType) return true
   return order.items.some((item) => {
     try {
       return SHOPIFY_PRODUCT_PATH.test(new URL(item.externalUrl ?? '').pathname)
