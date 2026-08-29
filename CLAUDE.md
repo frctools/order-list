@@ -29,9 +29,16 @@ bun run build
 Database migrations (Drizzle Kit reads `DATABASE_URL`):
 
 ```bash
-bun drizzle-kit generate   # create migration from schema changes
-bun drizzle-kit migrate    # apply pending migrations in drizzle/
+bun run db:generate   # create a migration from schema changes
+bun run db:migrate    # apply pending migrations in drizzle/
 ```
+
+**Migrations do not run themselves.** Nothing in the build or the Workers deploy applies them, so a schema change ships in two steps: apply the migration against production Postgres, *then* deploy the Worker. Getting that order wrong takes the site down for as long as it takes to fix — the new code queries columns the old database doesn't have. Only additive migrations are safe to run in either order; a rename or drop (like `unit_price_cents` → `unit_price_micros` in `0016`) is not.
+
+Two caveats when writing one:
+
+- **Hand-written migrations still need a snapshot.** `0013`–`0015` were written by hand without regenerating `drizzle/meta`, which left the snapshots four migrations behind the schema — `db:generate` then diffed from the wrong baseline and started prompting about unrelated tables. `0016_snapshot.json` re-baselines it. If you hand-write SQL again, regenerate the snapshot too, and check `db:generate` reports *"No schema changes"* on an unmodified schema before committing.
+- **Drizzle Kit generates destructively for renames.** It emits DROP + ADD, which discards the column's data. Migration `0016` is the pattern to copy: add the new column, `UPDATE` across from the old one, then drop.
 
 There is no test runner configured; "verification" means lint + typecheck + exercising the dev server.
 
