@@ -32,7 +32,7 @@ export interface ExtractionResult {
   url: string
   hostname: string
   vendorName: string
-  source: 'shopify' | 'json-ld' | 'opengraph' | 'none'
+  source: 'shopify' | 'json-ld' | 'opengraph' | 'url' | 'none'
   product: ExtractedProduct | null
 }
 
@@ -48,8 +48,16 @@ const FRC_VENDORS: Array<{ match: string, name: string }> = [
   { match: 'andymark.com', name: 'AndyMark' },
   { match: 'vexrobotics.com', name: 'VEX Robotics' },
   { match: 'vexpro.com', name: 'VEXpro' },
-  { match: 'ctr-electronics.com', name: 'Cross the Road Electronics' }
+  { match: 'ctr-electronics.com', name: 'Cross the Road Electronics' },
+  { match: 'onlinemetals.com', name: 'Online Metals' },
+  { match: 'mcmaster.com', name: 'McMaster-Carr' }
 ]
+
+// Match a hostname against a bare domain, tolerating www./store. subdomains.
+function hostMatches(hostname: string, domain: string): boolean {
+  const h = hostname.toLowerCase().replace(/^www\./, '')
+  return h === domain || h.endsWith(`.${domain}`)
+}
 
 // Shopify's `product.vendor` holds the brand/manufacturer, not the store you
 // order from, and is often left as the "My Store" default. Ignore that value.
@@ -60,9 +68,8 @@ const USER_AGENT
   + '(KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36'
 
 function friendlyVendorName(hostname: string): string | null {
-  const h = hostname.toLowerCase().replace(/^www\./, '')
   for (const v of FRC_VENDORS) {
-    if (h === v.match || h.endsWith(`.${v.match}`)) return v.name
+    if (hostMatches(hostname, v.match)) return v.name
   }
   return null
 }
@@ -301,6 +308,51 @@ function getMeta(document: ParsedDoc, selectors: string[]): string | null {
   return null
 }
 
+// ---- URL-only fallback ---------------------------------------------------
+
+// Online Metals sits behind a bot challenge, so a server fetch of the product
+// page comes back as an interstitial rather than the listing — none of the
+// three strategies above can see anything. Their URLs carry enough on their
+// own to be worth filling in:
+//   /en/buy/{category}/{slug}/pid/{pid}          the product
+//   ?variant={pid}_{lengthInInches}_{n}          a specific cut length
+const ONLINE_METALS_PRODUCT = /\/buy\/[^/]+\/([^/]+)\/pid\/(\d+)/i
+
+function titleFromSlug(slug: string): string {
+  return slug
+    .split('-')
+    .filter(Boolean)
+    .join(' ')
+    // Leading dimensions are written as "0-625" for 0.625". Only a leading
+    // zero is unambiguous — "1-2" is a fraction (1/2"), so leave it alone.
+    .replace(/\b0 (\d+)/g, '0.$1')
+    .replace(/\b\w/g, character => character.toUpperCase())
+}
+
+function fromOnlineMetalsUrl(urlObj: URL): ExtractedProduct | null {
+  const match = ONLINE_METALS_PRODUCT.exec(urlObj.pathname)
+  if (!match) return null
+  const [, slug, productId] = match
+
+  // The cut length is what actually gets ordered, so prefer its sku over the
+  // bare product id when the link names one.
+  const variant = urlObj.searchParams.get('variant')
+  const isVariantOfProduct = !!variant && variant.startsWith(`${productId}_`)
+  const lengthInches = isVariantOfProduct ? variant.split('_')[1] : null
+
+  return {
+    title: titleFromSlug(slug!),
+    description: null,
+    // Price is per cut length and only lives on the page we can't read.
+    price: null,
+    currency: 'USD',
+    sku: isVariantOfProduct ? variant : productId!,
+    variantId: isVariantOfProduct ? variant : null,
+    variantTitle: lengthInches ? `${lengthInches}" length` : null,
+    variants: []
+  }
+}
+
 // ---- Orchestration -------------------------------------------------------
 
 export async function extractPart(
@@ -427,6 +479,21 @@ export async function extractPart(
           variantTitle: null,
           variants: []
         }
+      }
+    }
+  }
+
+  // 4. Nothing readable came back. For vendors we can decode a URL for, that
+  // still beats an empty form — the buyer only has to add the price.
+  if (hostMatches(hostname, 'onlinemetals.com')) {
+    const product = fromOnlineMetalsUrl(urlObj)
+    if (product) {
+      return {
+        url,
+        hostname,
+        vendorName: mappedVendor ?? titleCaseHost(hostname),
+        source: 'url',
+        product
       }
     }
   }
