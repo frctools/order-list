@@ -26,6 +26,13 @@ import type { OrderRecord, OrderItemRecord } from './order-service'
 
 const SHOPIFY_VARIANT_ID = /^\d+$/
 
+// Shopify product URLs end at the handle — /products/{handle}, sometimes under
+// /collections/{collection}. Handles are slugs built from the product title, so
+// they carry letters. A bare numeric segment (playingwithfusion.com/products/118)
+// or a deeper path (digikey.com/en/products/detail/...) is some other site's
+// scheme that happens to use the same word.
+const SHOPIFY_PRODUCT_PATH = /\/products\/(?=[^/?#]*[a-z])[^/?#]+\/?$/i
+
 // Cart permalinks live in a URL, so a very long order would produce a link
 // that gets truncated in transit. Cap the lines and let the rest be added by
 // hand rather than silently building a broken cart.
@@ -116,9 +123,13 @@ function detectPlatform(
   // so the path heuristic below would otherwise claim them.
   if (DIGIKEY_HOSTS.some(domain => hostMatches(host, domain))) return 'digikey'
   if (order.vendorType) return order.vendorType === 'shopify' ? 'shopify' : null
-  const shopifyish = order.items.some(item =>
-    /\/products\//.test(item.externalUrl ?? '')
-  )
+  const shopifyish = order.items.some((item) => {
+    try {
+      return SHOPIFY_PRODUCT_PATH.test(new URL(item.externalUrl ?? '').pathname)
+    } catch {
+      return false
+    }
+  })
   return shopifyish ? 'shopify' : null
 }
 
@@ -350,7 +361,19 @@ export async function buildCartLink(
     }
   }
 
-  if (lines.length === 0) return { ...empty, reason: 'no-variants' }
+  if (lines.length === 0) {
+    // The path heuristic can still be wrong — plenty of sites put /products/
+    // in a URL. Only a lookup that actually reached Shopify's product JSON
+    // proves the platform, so without one, say so rather than blaming the
+    // parts for not matching.
+    const confirmedShopify = [...products.values()].some(
+      extraction => extraction.source === 'shopify'
+    )
+    return {
+      ...empty,
+      reason: confirmedShopify ? 'no-variants' : 'unsupported-platform'
+    }
+  }
 
   return {
     // `storefront=true` lands on the store's cart page. Without it Shopify

@@ -38,11 +38,24 @@ function resolveHost(order: Order): string | null {
 
 // Mirrors detectPlatform() on the server; see the note above about this being
 // deliberately optimistic.
+// Shopify product URLs end at the handle — /products/{handle}, sometimes under
+// /collections/{collection}. Handles are slugs built from the product title, so
+// they carry letters. A bare numeric segment (playingwithfusion.com/products/118)
+// or a deeper path (digikey.com/en/products/detail/...) is some other site's
+// scheme that happens to use the same word.
+const SHOPIFY_PRODUCT_PATH = /\/products\/(?=[^/?#]*[a-z])[^/?#]+\/?$/i
+
 function hasSupportedPlatform(order: Order, host: string): boolean {
   if (/(^|\.)amazon\.[a-z]{2,3}(\.[a-z]{2})?$/i.test(host)) return true
   if (/(^|\.)digikey\.(com|ca)$/i.test(host)) return true
   if (order.vendorType) return order.vendorType !== 'bigcommerce'
-  return order.items.some(item => /\/products\//.test(item.externalUrl ?? ''))
+  return order.items.some((item) => {
+    try {
+      return SHOPIFY_PRODUCT_PATH.test(new URL(item.externalUrl ?? '').pathname)
+    } catch {
+      return false
+    }
+  })
 }
 
 export function canBuildVendorCart(order: Order): boolean {
