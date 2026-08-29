@@ -15,6 +15,12 @@ export interface ExtractedVariant {
   price: number | null
 }
 
+// A quantity discount tier: buy `quantity` or more, pay `unitPrice` each.
+export interface PriceBreak {
+  quantity: number
+  unitPrice: number
+}
+
 export interface ExtractedProduct {
   title: string
   description: string | null
@@ -27,6 +33,10 @@ export interface ExtractedProduct {
   variantId: string | null
   variantTitle: string | null
   variants: ExtractedVariant[]
+  // Quantity discount tiers, when the vendor publishes them (DigiKey does).
+  // Ascending by quantity; the applicable tier is the last one the ordered
+  // quantity reaches.
+  priceBreaks?: PriceBreak[]
 }
 
 export interface ExtractionResult {

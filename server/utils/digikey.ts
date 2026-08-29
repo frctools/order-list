@@ -8,7 +8,11 @@
 // Credentials are optional: with none set, callers fall back to the
 // URL-derived name and SKU.
 
-import type { ExtractedProduct, ExtractedVariant } from './part-extractor'
+import type {
+  ExtractedProduct,
+  ExtractedVariant,
+  PriceBreak
+} from './part-extractor'
 
 const TOKEN_PATH = '/v1/oauth2/token'
 const PRODUCT_PATH = '/products/v4/search'
@@ -92,18 +96,18 @@ interface DigiKeyProduct {
   ProductStatus?: { Status?: string }
 }
 
-// "1 @ $0.33 · 10 @ $0.231 · 100 @ $0.1768" — worth carrying into Notes,
-// since the break you land on decides whether to buy ten or a hundred.
-function priceBreakSummary(variation: DigiKeyVariation | undefined): string {
-  const breaks = (variation?.StandardPricing ?? []).filter(
-    tier => typeof tier.BreakQuantity === 'number'
-      && typeof tier.UnitPrice === 'number'
-  )
-  if (breaks.length < 2) return ''
-  return breaks
-    .slice(0, 5)
-    .map(tier => `${tier.BreakQuantity} @ $${tier.UnitPrice}`)
-    .join(' · ')
+// Quantity discount tiers, ascending, so the editor can re-price a line when
+// its quantity reaches the next break.
+function priceBreaks(variation: DigiKeyVariation | undefined): PriceBreak[] {
+  return (variation?.StandardPricing ?? [])
+    .filter(
+      (tier): tier is { BreakQuantity: number, UnitPrice: number } =>
+        typeof tier.BreakQuantity === 'number'
+        && typeof tier.UnitPrice === 'number'
+        && tier.BreakQuantity > 0
+    )
+    .map(tier => ({ quantity: tier.BreakQuantity, unitPrice: tier.UnitPrice }))
+    .sort((a, b) => a.quantity - b.quantity)
 }
 
 function toExtractedProduct(product: DigiKeyProduct): ExtractedProduct | null {
@@ -127,14 +131,12 @@ function toExtractedProduct(product: DigiKeyProduct): ExtractedProduct | null {
   const detail = product.Description?.DetailedDescription?.trim()
     || product.Description?.ProductDescription?.trim()
     || null
-  const breaks = priceBreakSummary(variations[0])
+  const breaks = priceBreaks(variations[0])
   const status = product.ProductStatus?.Status?.trim()
 
   return {
     title: manufacturer ? `${manufacturer} ${mpn}` : mpn,
-    description: [detail, breaks && `Price breaks: ${breaks}`]
-      .filter(Boolean)
-      .join(' — ') || null,
+    description: detail,
     // The qty-1 price, matching what the product page leads with.
     price: product.UnitPrice ?? variants[0]?.price ?? null,
     currency: 'USD',
@@ -146,7 +148,8 @@ function toExtractedProduct(product: DigiKeyProduct): ExtractedProduct | null {
         ? status
         : variations[0]?.PackageType?.Name?.trim() ?? null,
     // Only offer a picker when there's a real packaging choice to make.
-    variants: variants.length > 1 ? variants : []
+    variants: variants.length > 1 ? variants : [],
+    priceBreaks: breaks.length > 1 ? breaks : undefined
   }
 }
 
