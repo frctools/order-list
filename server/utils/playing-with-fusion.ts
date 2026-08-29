@@ -13,13 +13,21 @@
 // Unlike BigCommerce, the product id is in the URL — /products/118 — so no
 // page fetch is needed to find it.
 
-const PWF_PRODUCT_PATH = /\/products\/(\d+)\/?$/i
+// Deliberately unanchored. Their own category links append parameters to the
+// path rather than a query string — /products/114&catid=1001 — so the id is
+// whatever digits follow /products/, not the whole final segment.
+const PWF_PRODUCT_PATH = /\/products\/(\d+)/i
 
 export const PLAYING_WITH_FUSION_HOSTS = ['playingwithfusion.com']
 
 export function playingWithFusionProductId(url: string): string | null {
   try {
-    return PWF_PRODUCT_PATH.exec(new URL(url).pathname)?.[1] ?? null
+    const parsed = new URL(url)
+    const fromPath = PWF_PRODUCT_PATH.exec(parsed.pathname)?.[1]
+    if (fromPath) return fromPath
+    // Their older links, still linked from their own pages, name it outright.
+    const pdid = parsed.searchParams.get('pdid')?.trim()
+    return pdid && /^\d+$/.test(pdid) ? pdid : null
   } catch {
     return null
   }
