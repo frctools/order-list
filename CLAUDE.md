@@ -43,6 +43,7 @@ Dev config lives in `.env` (gitignored). Most server code reads `process.env.*` 
 - `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` (`http://localhost:3000` in dev)
 - `RESEND_KEY` — transactional email; optional in dev (only used when sending invites/notifications)
 - `MEILISEARCH_HOST`, `MEILISEARCH_API_KEY`, `MEILISEARCH_INDEX` — product search; optional
+- `DIGIKEY_CLIENT_ID`, `DIGIKEY_CLIENT_SECRET`, `DIGIKEY_API_BASE` — DigiKey Product Information API v4 (developer.digikey.com); optional. Sandbox and production are separate apps with separate credentials, so `DIGIKEY_API_BASE` has to match the pair in use — `https://sandbox-api.digikey.com` or `https://api.digikey.com`. Unset means DigiKey parts fall back to the URL-derived name and SKU.
 - `NUXT_PUBLIC_SENTRY_DSN` — optional
 
 ## Architecture
