@@ -256,6 +256,7 @@ const textColor = (colorStr: string) => {
 
     <template #footer>
       <div class="flex flex-wrap justify-end gap-2">
+        <VendorCartButton :order="order" />
         <UButton
           v-if="order.status !== 'to_order'"
           size="xs"
