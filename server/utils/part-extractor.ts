@@ -32,7 +32,7 @@ export interface ExtractionResult {
   url: string
   hostname: string
   vendorName: string
-  source: 'shopify' | 'json-ld' | 'opengraph' | 'url' | 'none'
+  source: 'shopify' | 'json-ld' | 'opengraph' | 'scraper' | 'url' | 'none'
   product: ExtractedProduct | null
 }
 
@@ -54,7 +54,7 @@ const FRC_VENDORS: Array<{ match: string, name: string }> = [
 ]
 
 // Match a hostname against a bare domain, tolerating www./store. subdomains.
-function hostMatches(hostname: string, domain: string): boolean {
+export function hostMatches(hostname: string, domain: string): boolean {
   const h = hostname.toLowerCase().replace(/^www\./, '')
   return h === domain || h.endsWith(`.${domain}`)
 }
@@ -72,6 +72,12 @@ function friendlyVendorName(hostname: string): string | null {
     if (hostMatches(hostname, v.match)) return v.name
   }
   return null
+}
+
+// The name to show for a host: the curated one when we have it, else a
+// readable form of the domain.
+export function vendorDisplayName(hostname: string): string {
+  return friendlyVendorName(hostname) ?? titleCaseHost(hostname)
 }
 
 function titleCaseHost(hostname: string): string {
