@@ -12,7 +12,14 @@ import { Resend } from "resend";
 import InviteEmail from "./InviteEmail.vue";
 import { render } from "@vue-email/render";
 import { APIError } from "better-auth/api";
-import { isSignUpAllowed, SIGNUP_CLOSED_MESSAGE } from "./signup-gate";
+import {
+  acceptPendingInvitations,
+  isSignUpAllowed,
+  SIGNUP_CLOSED_MESSAGE,
+  soleOrganizationOf,
+} from "./signup-gate";
+import { user as authUser } from "./auth-schema";
+import { eq } from "drizzle-orm";
 import { googleCredentials } from "./social-auth";
 import * as schema from "./auth-schema";
 import { EMAIL_FROM_INVITES, SITE_URL } from "./site";
@@ -94,6 +101,33 @@ export const useAuth = () =>
             throw new APIError("FORBIDDEN", {
               message: SIGNUP_CLOSED_MESSAGE,
             });
+          },
+        },
+      },
+      // Membership is settled at sign-in rather than only when someone follows
+      // an /accept-invitation link, because that link only ever arrives by
+      // email. Doing it here covers every route in -- the signup form, Google,
+      // a plain login -- and repairs accounts that were created before this
+      // existed, since it runs again on their next sign-in.
+      session: {
+        create: {
+          before: async (newSession) => {
+            const [row] = await useDB()
+              .select({ email: authUser.email })
+              .from(authUser)
+              .where(eq(authUser.id, newSession.userId))
+              .limit(1);
+            if (!row?.email) return;
+
+            const joined = await acceptPendingInvitations(
+              newSession.userId,
+              row.email,
+            );
+            // Start the session in an organization rather than in none, so
+            // the dashboard is not left showing a team the server does not
+            // agree is selected while every query fails.
+            const active = joined ?? (await soleOrganizationOf(newSession.userId));
+            if (active) return { data: { activeOrganizationId: active } };
           },
         },
       },
