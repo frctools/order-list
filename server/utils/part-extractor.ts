@@ -36,6 +36,7 @@ export interface ExtractionResult {
   source:
     | 'shopify'
     | 'amazon'
+    | 'digikey'
     | 'json-ld'
     | 'opengraph'
     | 'scraper'
@@ -408,9 +409,33 @@ function fromMcMasterUrl(urlObj: URL): ExtractedProduct | null {
 // own product id are all in the path:
 //   /en/products/detail/{manufacturer}/{mpn}/{id}
 //   /product-detail/en/{manufacturer}/{mpn}/{digikeyPartNumber}/{id}  (legacy)
+export const DIGIKEY_HOSTS = ['digikey.com', 'digikey.ca']
 const DIGIKEY_MODERN = /\/products\/detail\/([^/]+)\/([^/]+)\/(\d+)/i
 const DIGIKEY_LEGACY
   = /\/product-detail\/[a-z]{2}\/([^/]+)\/([^/]+)\/([^/]+)\/(\d+)/i
+
+// The manufacturer and part number a DigiKey link names, for callers that
+// want to look the part up properly rather than guess from the URL.
+export function digiKeyPartFromUrl(
+  url: string
+): { manufacturer: string, mpn: string } | null {
+  let urlObj: URL
+  try {
+    urlObj = new URL(url)
+  } catch {
+    return null
+  }
+  if (!DIGIKEY_HOSTS.some(domain => hostMatches(urlObj.hostname, domain))) {
+    return null
+  }
+  const match
+    = DIGIKEY_LEGACY.exec(urlObj.pathname)
+      ?? DIGIKEY_MODERN.exec(urlObj.pathname)
+  if (!match) return null
+  const mpn = decodeURIComponent(match[2]!).trim()
+  if (!mpn) return null
+  return { manufacturer: titleFromSlug(decodeURIComponent(match[1]!)), mpn }
+}
 
 function fromDigiKeyUrl(urlObj: URL): ExtractedProduct | null {
   const match
