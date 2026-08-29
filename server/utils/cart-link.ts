@@ -32,6 +32,13 @@ import {
   fetchBigCommerceProductId,
   BIGCOMMERCE_HOSTS
 } from './bigcommerce'
+import {
+  playingWithFusionAddFields,
+  playingWithFusionAddUrl,
+  playingWithFusionCartUrl,
+  playingWithFusionProductId,
+  PLAYING_WITH_FUSION_HOSTS
+} from './playing-with-fusion'
 import type { OrderRecord, OrderItemRecord } from './order-service'
 
 const SHOPIFY_VARIANT_ID = /^\d+$/
@@ -75,6 +82,9 @@ export interface CartAddLink {
   partName: string
   quantity: number
   url: string
+  // Set when the vendor's add endpoint only answers to a POST, in which case
+  // the UI submits a form to `url` carrying these fields.
+  postFields?: Record<string, string>
 }
 
 export interface CartLinkResult {
@@ -121,7 +131,12 @@ function resolveHost(order: OrderRecord): string | null {
   return hosts.size === 1 ? [...hosts][0]! : null
 }
 
-type CartPlatform = 'shopify' | 'amazon' | 'digikey' | 'bigcommerce'
+type CartPlatform =
+  | 'shopify'
+  | 'amazon'
+  | 'digikey'
+  | 'bigcommerce'
+  | 'playing-with-fusion'
 
 // FastAdd takes DigiKey part numbers and quantities straight off a URL:
 // https://forum.digikey.com/t/digikey-fastadd-.../61356
@@ -147,6 +162,11 @@ function detectPlatform(
     || BIGCOMMERCE_HOSTS.some(domain => hostMatches(host, domain))
   ) {
     return 'bigcommerce'
+  }
+  if (
+    PLAYING_WITH_FUSION_HOSTS.some(domain => hostMatches(host, domain))
+  ) {
+    return 'playing-with-fusion'
   }
   // Before the Shopify check: DigiKey product URLs also contain /products/,
   // so the path heuristic below would otherwise claim them.
@@ -392,6 +412,47 @@ async function buildBigCommerceCart(
   }
 }
 
+// Playing With Fusion adds one part per POST, and the product id is right in
+// the URL — so unlike BigCommerce this needs no lookups at all.
+function buildPlayingWithFusionCart(
+  order: OrderRecord,
+  host: string,
+  empty: Omit<CartLinkResult, 'reason'>
+): CartLinkResult {
+  const addLinks: CartAddLink[] = []
+  const included: CartLinkItem[] = []
+  const excluded: CartLinkItem[] = []
+
+  for (const item of order.items) {
+    const productId = item.externalUrl
+      ? playingWithFusionProductId(item.externalUrl)
+      : null
+    if (!productId) {
+      excluded.push(summarize(item))
+      continue
+    }
+    addLinks.push({
+      id: item.id,
+      partName: item.partName,
+      quantity: item.quantity,
+      url: playingWithFusionAddUrl(host),
+      postFields: playingWithFusionAddFields(productId, item.quantity)
+    })
+    included.push(summarize(item))
+  }
+
+  if (addLinks.length === 0) return { ...empty, reason: 'no-variants' }
+
+  return {
+    url: null,
+    addLinks,
+    cartUrl: playingWithFusionCartUrl(host),
+    included,
+    excluded,
+    reason: 'ok'
+  }
+}
+
 export async function buildCartLink(
   order: OrderRecord,
   signal?: AbortSignal
@@ -413,6 +474,9 @@ export async function buildCartLink(
   }
   if (platform === 'bigcommerce') {
     return buildBigCommerceCart(order, host, empty, signal)
+  }
+  if (platform === 'playing-with-fusion') {
+    return buildPlayingWithFusionCart(order, host, empty)
   }
 
   // Only parts we can't already read a variant id off of need a lookup.

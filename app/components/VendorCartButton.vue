@@ -33,6 +33,21 @@ const listOpen = ref(false)
 // Which parts have been clicked, so a long order doesn't lose its place.
 const addedIds = ref(new Set<string>())
 
+// Shared between the link rows and the form rows, which have to look alike.
+const rowClass
+  = 'flex w-full items-start gap-2 rounded-md p-1.5 text-sm '
+    + 'hover:bg-gray-100 dark:hover:bg-gray-800'
+
+function rowIcon(id: string): string {
+  return addedIds.value.has(id) ? 'i-lucide-check' : 'i-lucide-plus'
+}
+
+function rowIconClass(id: string): string {
+  return `mt-0.5 shrink-0 ${
+    addedIds.value.has(id) ? 'text-primary-500' : 'text-gray-400'
+  }`
+}
+
 const failureMessage: Record<CartLinkResult['reason'], string> = {
   ok: '',
   'no-vendor': 'These parts don\'t share a single storefront to open a cart on.',
@@ -149,17 +164,42 @@ async function openCart() {
             v-for="link in plan?.addLinks ?? []"
             :key="link.id"
           >
+            <!--
+              Some vendors (Playing With Fusion) only add on a POST, so those
+              rows submit a form rather than following a link. Both target the
+              same named window so the buyer stays in one tab.
+            -->
+            <form
+              v-if="link.postFields"
+              :action="link.url"
+              method="post"
+              target="vendorcart"
+              @submit="addedIds.add(link.id)"
+            >
+              <input
+                v-for="(value, name) in link.postFields"
+                :key="name"
+                type="hidden"
+                :name="name"
+                :value="value"
+              >
+              <button type="submit" :class="rowClass">
+                <UIcon :name="rowIcon(link.id)" :class="rowIconClass(link.id)" />
+                <span class="min-w-0 flex-1 text-left">
+                  <span class="block truncate">{{ link.partName }}</span>
+                  <span class="text-xs text-gray-500">&times;{{ link.quantity }}</span>
+                </span>
+              </button>
+            </form>
+
             <a
+              v-else
               :href="link.url"
               target="vendorcart"
-              class="flex items-start gap-2 rounded-md p-1.5 text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
+              :class="rowClass"
               @click="addedIds.add(link.id)"
             >
-              <UIcon
-                :name="addedIds.has(link.id) ? 'i-lucide-check' : 'i-lucide-plus'"
-                class="mt-0.5 shrink-0"
-                :class="addedIds.has(link.id) ? 'text-primary-500' : 'text-gray-400'"
-              />
+              <UIcon :name="rowIcon(link.id)" :class="rowIconClass(link.id)" />
               <span class="min-w-0 flex-1">
                 <span class="block truncate">{{ link.partName }}</span>
                 <span class="text-xs text-gray-500">&times;{{ link.quantity }}</span>
