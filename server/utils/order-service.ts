@@ -90,6 +90,8 @@ export interface OrderRecord {
   vendorId: string | null;
   vendorName: string | null;
   vendorType: "shopify" | "bigcommerce" | "amazon" | null;
+  // The vendor's storefront host, used to build a one-click cart link.
+  vendorHostname: string | null;
   status: "to_order" | "ordered" | "arrived";
   requestedBy: string;
   requestedByName: string | null;
@@ -196,6 +198,7 @@ async function fetchOrders(db: DB, where: SQL | undefined): Promise<OrderRecord[
         string | null
       >`coalesce(${vendors.name}, ${orders.vendorName})`,
       vendorType: vendors.type,
+      vendorHostname: vendors.hostname,
       status: orders.status,
       requestedBy: orders.requestedBy,
       requestedByName: authUser.name,

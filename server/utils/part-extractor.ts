@@ -20,6 +20,10 @@ export interface ExtractedProduct {
   price: number | null
   currency: string | null
   sku: string | null
+  // The platform id of the variant these details describe. `variants` is left
+  // empty when there's no real choice to make, so this is the only way to
+  // recover the id of a single-variant product (a cart link needs it).
+  variantId: string | null
   variantTitle: string | null
   variants: ExtractedVariant[]
 }
@@ -216,6 +220,7 @@ async function tryShopify(
       price: selected?.price ?? null,
       currency: 'USD',
       sku: selected?.sku ?? null,
+      variantId: selected?.id ?? null,
       variantTitle:
         selected && selected.title !== title ? selected.title : null,
       variants: hasRealVariants ? variants : []
@@ -376,6 +381,8 @@ export async function extractPart(
           price,
           currency: currency ?? 'USD',
           sku: asString(node.sku) ?? asString(node.mpn),
+          // Neither fallback source exposes platform variant ids.
+          variantId: null,
           variantTitle: null,
           variants: []
         }
@@ -415,6 +422,8 @@ export async function extractPart(
             'meta[itemprop="sku"]',
             '[itemprop="sku"]'
           ]),
+          // Neither fallback source exposes platform variant ids.
+          variantId: null,
           variantTitle: null,
           variants: []
         }

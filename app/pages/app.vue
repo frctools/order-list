@@ -262,6 +262,7 @@
                 <span class="text-lg font-semibold">
                   {{ formatCurrencyFromCents(order.grandTotalCents) ?? "$0.00" }}
                 </span>
+                <VendorCartButton :order="order" compact />
                 <UButton
                   v-if="nextStatus(order.status)"
                   size="xs"
