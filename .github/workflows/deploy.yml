@@ -69,11 +69,11 @@ jobs:
           printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
-      # --delete so a removed route cannot linger in .output, but .env and the
-      # installed node_modules are excluded and rsync leaves excluded paths on
-      # the receiver alone. .output/server/node_modules is Nitro's traced
-      # dependency copy; the droplet resolves from its own node_modules
-      # instead, which it needs anyway for drizzle-kit.
+      # --delete so a removed route cannot linger in .output, but .env and .data
+      # (@nuxt/content's seeded SQLite) are runtime state, and rsync leaves
+      # excluded paths on the receiver alone. .output/server/node_modules is
+      # Nitro's traced dependency copy; the droplet resolves from its own
+      # node_modules instead, which it needs anyway for drizzle-kit.
       - name: Upload
         run: |
           rsync -az --delete \
@@ -83,6 +83,7 @@ jobs:
             --exclude='node_modules' \
             --exclude='.nuxt' \
             --exclude='.env' \
+            --exclude='.data' \
             --exclude='.output/server/node_modules' \
             --exclude='vendord/node_modules' \
             --exclude='.wrangler' \
@@ -108,10 +109,21 @@ jobs:
       - name: Smoke test
         run: |
           set -e
+          # One URL per rendering path: prerendered landing, SSR'd app route,
+          # Nuxt Content (needs better-sqlite3 and a seeded .data), and an API
+          # route. Checking only / let a sitewide docs 404 ship green.
+          probe() {
+            curl -s -o /dev/null -m 10 -w '%{http_code}' "https://parts.innovatorsrobotics.com$1" || echo 000
+          }
           for i in $(seq 1 10); do
-            code=$(curl -s -o /dev/null -m 10 -w '%{http_code}' https://parts.innovatorsrobotics.com/ || echo 000)
-            echo "attempt $i: HTTP $code"
-            [ "$code" = "200" ] && exit 0
+            root=$(probe /)
+            docs=$(probe /docs/getting-started)
+            login=$(probe /auth/login)
+            api=$(probe /api/orders)
+            echo "attempt $i: /=$root docs=$docs login=$login api=$api"
+            if [ "$root" = "200" ] && [ "$docs" = "200" ]                && [ "$login" = "200" ] && [ "$api" = "401" ]; then
+              exit 0
+            fi
             sleep 6
           done
           echo "site did not come back healthy"

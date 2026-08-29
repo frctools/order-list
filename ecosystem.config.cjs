@@ -43,7 +43,14 @@ module.exports = {
     {
       name: 'innovators-parts',
       script: path.join(root, '.output/server/index.mjs'),
-      interpreter: 'bun',
+      // Node, not Bun. @nuxt/content's server runtime opens its SQLite
+      // through better-sqlite3, which is a Node native addon that Bun
+      // cannot dlopen ('better-sqlite3' is not yet supported in Bun), so
+      // every content query throws and /docs answers 404 while the rest of
+      // the site looks fine. This survived a Windows-built .output, which
+      // bundled a different connector, and broke the moment CI built on
+      // Linux and the real driver got picked.
+      interpreter: 'node',
       cwd: root,
       // Nuxt's node-server build reads its own config from the environment.
       env: {
@@ -67,7 +74,14 @@ module.exports = {
       // same DATABASE_URL the app uses — not just a host and port.
       name: 'vendord',
       script: path.join(root, 'vendord/.output/server/index.mjs'),
-      interpreter: 'bun',
+      // Node, not Bun. @nuxt/content's server runtime opens its SQLite
+      // through better-sqlite3, which is a Node native addon that Bun
+      // cannot dlopen ('better-sqlite3' is not yet supported in Bun), so
+      // every content query throws and /docs answers 404 while the rest of
+      // the site looks fine. This survived a Windows-built .output, which
+      // bundled a different connector, and broke the moment CI built on
+      // Linux and the real driver got picked.
+      interpreter: 'node',
       cwd: root,
       env: {
         ...fileEnv,
