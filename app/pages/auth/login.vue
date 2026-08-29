@@ -1,8 +1,20 @@
 <template>
   <div>
+    <UAlert
+      v-if="ssoDenied"
+      class="mb-4"
+      color="warning"
+      variant="soft"
+      icon="i-lucide-mail-plus"
+      title="That account has not been invited"
+      description="Signing in with Google still needs an invitation from a team
+        admin. Ask them to invite the address on that Google account."
+    />
+
     <UAuthForm
       :fields="fields"
       :schema="schema"
+      :providers="providerButtons"
       title="Welcome back"
       icon="i-lucide-lock"
       @submit="onSubmit"
@@ -28,7 +40,13 @@ useSeoMeta({
   description: 'Login to your account to continue'
 })
 
+const route = useRoute()
 const { signIn } = useAuth()
+
+// Set by errorCallbackURL when the invitation gate refuses an OAuth account.
+const ssoDenied = computed(() => route.query.sso === 'denied')
+
+const { providerButtons } = useSocialAuth(() => '/app')
 
 const schema = z.object({
   email: z.string().email('Invalid email'),

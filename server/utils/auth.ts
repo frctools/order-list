@@ -13,6 +13,7 @@ import InviteEmail from "./InviteEmail.vue";
 import { render } from "@vue-email/render";
 import { APIError } from "better-auth/api";
 import { isSignUpAllowed, SIGNUP_CLOSED_MESSAGE } from "./signup-gate";
+import { googleCredentials } from "./social-auth";
 import * as schema from "./auth-schema";
 import { EMAIL_FROM_INVITES, SITE_URL } from "./site";
 
@@ -63,9 +64,28 @@ export const useAuth = () =>
     emailAndPassword: {
       enabled: true,
     },
+    // Absent unless both env vars are set, so a machine without credentials
+    // behaves exactly as before rather than offering a button that 500s.
+    socialProviders: googleCredentials()
+      ? { google: googleCredentials()! }
+      : {},
+    account: {
+      accountLinking: {
+        enabled: true,
+        // Google verifies the address it hands over, so a Google sign-in on an
+        // address that already has a password account links to that account
+        // rather than colliding with it. Without this, the owner who signed up
+        // with a password could not later use Google on the same address.
+        trustedProviders: ["google"],
+      },
+    },
     // Signups are closed: only an invited address (or the very first account on
     // a fresh instance) may create a user. Enforced here rather than on the
     // signup page because Better Auth owns the route the form posts to.
+    //
+    // This covers social sign-in as well: createOAuthUser goes through the same
+    // createWithHooks("user") path, so a Google account with no invitation is
+    // refused here just like an email signup would be.
     databaseHooks: {
       user: {
         create: {
