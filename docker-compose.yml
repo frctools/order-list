@@ -3,12 +3,17 @@ services:
     image: postgres:17
     restart: always
     environment:
-      POSTGRES_PASSWORD: orderr
+      # Dev keeps the throwaway default; the droplet sets a real one in .env,
+      # which compose reads from the same file the app does.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-orderr}
     ports:
-      - "5433:5432"
+      # Bound to loopback deliberately. Docker publishes ports by writing
+      # iptables rules ahead of ufw's chain, so a bare "5433:5432" would put
+      # Postgres on the public internet with the firewall still reporting the
+      # port as denied.
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data 
- 
- 
+      - pgdata:/var/lib/postgresql/data
+
 volumes:
   pgdata:

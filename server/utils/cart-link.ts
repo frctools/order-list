@@ -1,7 +1,7 @@
 // Turn an order into a one-click cart link on the vendor's own storefront, so
 // the person placing the order doesn't have to re-find every part by hand.
 //
-// Three vendors can take a whole cart from a URL:
+// Four platforms, three of which take a whole cart from one URL:
 //   Shopify  /cart/{variantId}:{qty},...      needs the numeric variant id,
 //                                             which items rarely store — they
 //                                             hold the SKU, so it's resolved
@@ -11,6 +11,10 @@
 //   DigiKey  /classic/ordering/fastadd.aspx   needs DigiKey's own part number,
 //                                             resolved from the manufacturer
 //                                             part number through their API
+//
+// BigCommerce (REV Robotics, BaneBots) can't: it adds one product per URL and
+// ignores every multi-item form. Those orders come back as `addLinks`, a link
+// per part, which build the cart up as they're followed.
 
 import {
   amazonAsinFromUrl,
@@ -22,9 +26,30 @@ import {
   type ExtractionResult
 } from './part-extractor'
 import { fetchDigiKeyProduct } from './digikey'
+import {
+  bigCommerceAddUrl,
+  bigCommerceCartUrl,
+  fetchBigCommerceProductId,
+  BIGCOMMERCE_HOSTS
+} from './bigcommerce'
+import {
+  playingWithFusionAddFields,
+  playingWithFusionAddUrl,
+  playingWithFusionCartUrl,
+  playingWithFusionProductId,
+  PLAYING_WITH_FUSION_HOSTS
+} from './playing-with-fusion'
+import { SITE_HOST } from './site'
 import type { OrderRecord, OrderItemRecord } from './order-service'
 
 const SHOPIFY_VARIANT_ID = /^\d+$/
+
+// Shopify product URLs end at the handle — /products/{handle}, sometimes under
+// /collections/{collection}. Handles are slugs built from the product title, so
+// they carry letters. A bare numeric segment (playingwithfusion.com/products/118)
+// or a deeper path (digikey.com/en/products/detail/...) is some other site's
+// scheme that happens to use the same word.
+const SHOPIFY_PRODUCT_PATH = /\/products\/(?=[^/?#]*[a-z])[^/?#]+\/?$/i
 
 // Cart permalinks live in a URL, so a very long order would produce a link
 // that gets truncated in transit. Cap the lines and let the rest be added by
@@ -51,11 +76,27 @@ export interface CartLinkItem {
   quantity: number
 }
 
+// BigCommerce adds one product per URL, so those orders come back as a link
+// per part instead of a single cart link.
+export interface CartAddLink {
+  id: string
+  partName: string
+  quantity: number
+  url: string
+  // Set when the vendor's add endpoint only answers to a POST, in which case
+  // the UI submits a form to `url` carrying these fields.
+  postFields?: Record<string, string>
+}
+
 export interface CartLinkResult {
   url: string | null
   included: CartLinkItem[]
   excluded: CartLinkItem[]
   reason: CartLinkReason
+  // Set instead of `url` when the vendor can only add one part at a time.
+  addLinks?: CartAddLink[]
+  // Where to review what's been added, for the per-part flow.
+  cartUrl?: string
 }
 
 function normalizeHost(value: string): string | null {
@@ -91,7 +132,12 @@ function resolveHost(order: OrderRecord): string | null {
   return hosts.size === 1 ? [...hosts][0]! : null
 }
 
-type CartPlatform = 'shopify' | 'amazon' | 'digikey'
+type CartPlatform =
+  | 'shopify'
+  | 'amazon'
+  | 'digikey'
+  | 'bigcommerce'
+  | 'playing-with-fusion'
 
 // FastAdd takes DigiKey part numbers and quantities straight off a URL:
 // https://forum.digikey.com/t/digikey-fastadd-.../61356
@@ -112,13 +158,28 @@ function detectPlatform(
   host: string
 ): CartPlatform | null {
   if (order.vendorType === 'amazon' || isAmazonHost(host)) return 'amazon'
+  if (
+    order.vendorType === 'bigcommerce'
+    || BIGCOMMERCE_HOSTS.some(domain => hostMatches(host, domain))
+  ) {
+    return 'bigcommerce'
+  }
+  if (
+    PLAYING_WITH_FUSION_HOSTS.some(domain => hostMatches(host, domain))
+  ) {
+    return 'playing-with-fusion'
+  }
   // Before the Shopify check: DigiKey product URLs also contain /products/,
   // so the path heuristic below would otherwise claim them.
   if (DIGIKEY_HOSTS.some(domain => hostMatches(host, domain))) return 'digikey'
   if (order.vendorType) return order.vendorType === 'shopify' ? 'shopify' : null
-  const shopifyish = order.items.some(item =>
-    /\/products\//.test(item.externalUrl ?? '')
-  )
+  const shopifyish = order.items.some((item) => {
+    try {
+      return SHOPIFY_PRODUCT_PATH.test(new URL(item.externalUrl ?? '').pathname)
+    } catch {
+      return false
+    }
+  })
   return shopifyish ? 'shopify' : null
 }
 
@@ -273,7 +334,7 @@ async function buildDigiKeyCart(
   }
 
   // DigiKey asks tools to identify themselves so they can attribute traffic.
-  const params = new URLSearchParams({ utm_source: 'orders.frctools.com' })
+  const params = new URLSearchParams({ utm_source: SITE_HOST })
   const included: CartLinkItem[] = []
   const urlFor = (query: URLSearchParams) =>
     `https://${host}${DIGIKEY_FASTADD_PATH}?${query.toString()}`
@@ -300,6 +361,99 @@ async function buildDigiKeyCart(
   return { url: urlFor(params), included, excluded, reason: 'ok' }
 }
 
+// BigCommerce can't take a whole cart from one URL, so an order comes back as
+// a link per part. Following them in one tab builds the cart up — adds
+// accumulate in the session — which still beats searching for each part.
+async function buildBigCommerceCart(
+  order: OrderRecord,
+  host: string,
+  empty: Omit<CartLinkResult, 'reason'>,
+  signal?: AbortSignal
+): Promise<CartLinkResult> {
+  const withUrls = order.items.filter(item => item.externalUrl)
+  const excluded: CartLinkItem[] = order.items
+    .filter(item => !item.externalUrl)
+    .map(summarize)
+
+  const addLinks: CartAddLink[] = []
+  const included: CartLinkItem[] = []
+
+  for (let i = 0; i < withUrls.length; i += LOOKUP_BATCH_SIZE) {
+    const batch = withUrls.slice(i, i + LOOKUP_BATCH_SIZE)
+    const productIds = await Promise.all(
+      batch.map(item =>
+        fetchBigCommerceProductId(item.externalUrl!, signal).catch(() => null)
+      )
+    )
+    productIds.forEach((productId, index) => {
+      const item = batch[index]!
+      if (!productId) {
+        excluded.push(summarize(item))
+        return
+      }
+      addLinks.push({
+        id: item.id,
+        partName: item.partName,
+        quantity: item.quantity,
+        url: bigCommerceAddUrl(host, productId, item.quantity)
+      })
+      included.push(summarize(item))
+    })
+  }
+
+  if (addLinks.length === 0) return { ...empty, reason: 'no-variants' }
+
+  return {
+    url: null,
+    addLinks,
+    cartUrl: bigCommerceCartUrl(host),
+    included,
+    excluded,
+    reason: 'ok'
+  }
+}
+
+// Playing With Fusion adds one part per POST, and the product id is right in
+// the URL — so unlike BigCommerce this needs no lookups at all.
+function buildPlayingWithFusionCart(
+  order: OrderRecord,
+  host: string,
+  empty: Omit<CartLinkResult, 'reason'>
+): CartLinkResult {
+  const addLinks: CartAddLink[] = []
+  const included: CartLinkItem[] = []
+  const excluded: CartLinkItem[] = []
+
+  for (const item of order.items) {
+    const productId = item.externalUrl
+      ? playingWithFusionProductId(item.externalUrl)
+      : null
+    if (!productId) {
+      excluded.push(summarize(item))
+      continue
+    }
+    addLinks.push({
+      id: item.id,
+      partName: item.partName,
+      quantity: item.quantity,
+      url: playingWithFusionAddUrl(host),
+      postFields: playingWithFusionAddFields(productId, item.quantity)
+    })
+    included.push(summarize(item))
+  }
+
+  if (addLinks.length === 0) return { ...empty, reason: 'no-variants' }
+
+  return {
+    url: null,
+    addLinks,
+    cartUrl: playingWithFusionCartUrl(host),
+    included,
+    excluded,
+    reason: 'ok'
+  }
+}
+
 export async function buildCartLink(
   order: OrderRecord,
   signal?: AbortSignal
@@ -318,6 +472,12 @@ export async function buildCartLink(
   if (platform === 'amazon') return buildAmazonCart(order, host, empty)
   if (platform === 'digikey') {
     return buildDigiKeyCart(order, host, empty, signal)
+  }
+  if (platform === 'bigcommerce') {
+    return buildBigCommerceCart(order, host, empty, signal)
+  }
+  if (platform === 'playing-with-fusion') {
+    return buildPlayingWithFusionCart(order, host, empty)
   }
 
   // Only parts we can't already read a variant id off of need a lookup.
@@ -350,7 +510,19 @@ export async function buildCartLink(
     }
   }
 
-  if (lines.length === 0) return { ...empty, reason: 'no-variants' }
+  if (lines.length === 0) {
+    // The path heuristic can still be wrong — plenty of sites put /products/
+    // in a URL. Only a lookup that actually reached Shopify's product JSON
+    // proves the platform, so without one, say so rather than blaming the
+    // parts for not matching.
+    const confirmedShopify = [...products.values()].some(
+      extraction => extraction.source === 'shopify'
+    )
+    return {
+      ...empty,
+      reason: confirmedShopify ? 'no-variants' : 'unsupported-platform'
+    }
+  }
 
   return {
     // `storefront=true` lands on the store's cart page. Without it Shopify

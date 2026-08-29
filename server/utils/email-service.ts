@@ -3,6 +3,7 @@ import { render } from "@vue-email/render";
 import { useDB } from "./db";
 import { eq, and } from "drizzle-orm";
 import type { Component } from "vue";
+import { EMAIL_FROM_NOTIFICATIONS } from "./site";
 import { notificationLog, notificationPreferences } from "./schema";
 
 interface EmailOptions {
@@ -107,7 +108,7 @@ export const emailService = {
       }
 
       const payload = prepared.map((entry) => ({
-        from: "notifications@orders.frctools.com",
+        from: EMAIL_FROM_NOTIFICATIONS,
         to: entry.to,
         subject: entry.subject,
         html: entry.html,

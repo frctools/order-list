@@ -2,7 +2,7 @@
   <div>
     <UPageHero
       title="Track team orders with ease"
-      description="Plan, purchase, and receive parts in one place. FRCTools Orders gives your team a clear board and table view across the entire purchasing pipeline."
+      description="Plan, purchase, and receive parts in one place. Innovators Parts gives your team a clear board and table view across the entire purchasing pipeline."
       :links="heroLinks"
     >
       <template #top>
@@ -34,9 +34,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-const { user } = useAuth()
+const { loggedIn } = useAuth()
 
-const pageTitle = 'FRCTools Orders: Track and manage purchases'
+const pageTitle = 'Innovators Parts: Track and manage purchases'
 const pageDescription
   = 'An orders board for FRC teams. Create requests, place orders, and track spending.'
 
@@ -48,7 +48,7 @@ useSeoMeta({
 })
 
 const heroLinks = computed(() => {
-  if (user) {
+  if (loggedIn.value) {
     return [
       {
         label: 'View orders',
@@ -66,16 +66,13 @@ const heroLinks = computed(() => {
       }
     ]
   }
+  // Signups are invitation-only, so there is no "get started" path to offer a
+  // visitor -- an admin invites them and the email carries the link.
   return [
-    {
-      label: 'Get started free',
-      to: '/auth/signup',
-      trailingIcon: 'i-lucide-arrow-right'
-    },
     {
       label: 'Log in',
       to: '/auth/login',
-      icon: 'i-lucide-log-in'
+      trailingIcon: 'i-lucide-arrow-right'
     },
     {
       label: 'Search parts',
@@ -94,7 +91,7 @@ const features = [
   {
     title: 'Smart product inputting',
     description:
-      'Just paste a URL, and FRCTools Orders will automatically fetch product details like title, vendor, and pricing from popular suppliers.',
+      'Just paste a URL, and Innovators Parts will automatically fetch product details like title, vendor, and pricing from popular suppliers.',
     icon: 'i-lucide-clipboard-check'
   },
   {
@@ -130,15 +127,15 @@ const features = [
 ]
 
 const ctaTitle = computed(() =>
-  user ? 'Jump back into your orders' : 'Ready to organize purchases?'
+  loggedIn.value ? 'Jump back into your orders' : 'Ready to organize purchases?'
 )
 const ctaDescription = computed(() =>
-  user
+  loggedIn.value
     ? 'Open the app to create a request or advance an order.'
-    : 'Create an account and set up your organization in minutes.'
+    : 'Accounts are created by invitation. Ask a team admin to send you one.'
 )
 const ctaLinks = computed(() =>
-  user
+  loggedIn.value
     ? [
         {
           label: 'Open the app',
@@ -149,15 +146,15 @@ const ctaLinks = computed(() =>
       ]
     : [
         {
-          label: 'Sign up',
-          to: '/auth/signup',
+          label: 'Log in',
+          to: '/auth/login',
           trailingIcon: 'i-lucide-arrow-right'
           // color: "neutral",
         },
         {
-          label: 'Log in',
-          to: '/auth/login',
-          icon: 'i-lucide-log-in'
+          label: 'Read the documentation',
+          to: '/docs',
+          icon: 'i-lucide-book-open'
           // variant: "outline",
           // color: "neutral",
         }
