@@ -10,7 +10,12 @@
 // resolved through the part extractor, which reads the product JSON and hands
 // back both `sku` and `id` for every variant.
 
-import { extractPart, type ExtractionResult } from './part-extractor'
+import {
+  amazonAsinFromUrl,
+  extractPart,
+  isAmazonHost,
+  type ExtractionResult
+} from './part-extractor'
 import type { OrderRecord, OrderItemRecord } from './order-service'
 
 const SHOPIFY_VARIANT_ID = /^\d+$/
@@ -80,12 +85,21 @@ function resolveHost(order: OrderRecord): string | null {
   return hosts.size === 1 ? [...hosts][0]! : null
 }
 
-// A vendor row names the platform outright. Without one, treat a
-// `/products/{handle}` path as the Shopify tell — it's what the extractor
-// keys off too.
-function looksLikeShopify(order: OrderRecord): boolean {
-  if (order.vendorType) return order.vendorType === 'shopify'
-  return order.items.some(item => /\/products\//.test(item.externalUrl ?? ''))
+type CartPlatform = 'shopify' | 'amazon'
+
+// A vendor row names the platform outright. Without one, the host gives Amazon
+// away, and a `/products/{handle}` path is the Shopify tell — the same one the
+// extractor keys off.
+function detectPlatform(
+  order: OrderRecord,
+  host: string
+): CartPlatform | null {
+  if (order.vendorType === 'amazon' || isAmazonHost(host)) return 'amazon'
+  if (order.vendorType) return order.vendorType === 'shopify' ? 'shopify' : null
+  const shopifyish = order.items.some(item =>
+    /\/products\//.test(item.externalUrl ?? '')
+  )
+  return shopifyish ? 'shopify' : null
 }
 
 function summarize(item: OrderItemRecord): CartLinkItem {
@@ -140,6 +154,54 @@ function pickVariantId(
   return only && SHOPIFY_VARIANT_ID.test(only) ? only : null
 }
 
+// Amazon's ASIN is in every product link, and after extraction it's stored on
+// the item too — so an Amazon cart needs no lookups at all.
+function asinFor(item: OrderItemRecord): string | null {
+  const fromUrl = item.externalUrl
+    ? amazonAsinFromUrl(item.externalUrl)
+    : null
+  if (fromUrl) return fromUrl
+  const stored = item.variantId?.trim().toUpperCase()
+  return stored && /^[A-Z0-9]{10}$/.test(stored) ? stored : null
+}
+
+// Amazon takes a whole cart as ASIN/quantity pairs on its add-to-cart entry
+// point. The buyer needs to be signed in — the link bounces through sign-in
+// if they aren't — and lands on their cart with everything in it.
+function buildAmazonCart(
+  order: OrderRecord,
+  host: string,
+  empty: Omit<CartLinkResult, 'reason'>
+): CartLinkResult {
+  const included: CartLinkItem[] = []
+  const excluded: CartLinkItem[] = []
+  const params = new URLSearchParams()
+
+  for (const item of order.items) {
+    const asin = included.length < MAX_CART_LINES ? asinFor(item) : null
+    if (asin) {
+      const position = included.length + 1
+      params.set(`ASIN.${position}`, asin)
+      params.set(
+        `Quantity.${position}`,
+        String(Math.max(1, Math.trunc(item.quantity)))
+      )
+      included.push(summarize(item))
+    } else {
+      excluded.push(summarize(item))
+    }
+  }
+
+  if (included.length === 0) return { ...empty, reason: 'no-variants' }
+
+  return {
+    url: `https://${host}/gp/aws/cart/add.html?${params.toString()}`,
+    included,
+    excluded,
+    reason: 'ok'
+  }
+}
+
 export async function buildCartLink(
   order: OrderRecord,
   signal?: AbortSignal
@@ -152,9 +214,10 @@ export async function buildCartLink(
 
   const host = resolveHost(order)
   if (!host) return { ...empty, reason: 'no-vendor' }
-  if (!looksLikeShopify(order)) {
-    return { ...empty, reason: 'unsupported-platform' }
-  }
+
+  const platform = detectPlatform(order, host)
+  if (!platform) return { ...empty, reason: 'unsupported-platform' }
+  if (platform === 'amazon') return buildAmazonCart(order, host, empty)
 
   // Only parts we can't already read a variant id off of need a lookup.
   const needsLookup = order.items.filter(
