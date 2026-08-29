@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, watch, computed } from 'vue'
+import { reactive, watch, computed, ref } from 'vue'
 import type {
   Order,
   OrderDetailsValues,
@@ -26,7 +26,89 @@ function suggestionsFor(type: PaymentType) {
 
 const emit = defineEmits<{
   (e: 'submit', payload: { orderId: string, values: OrderDetailsValues }): void
+  // Receipts upload and delete immediately rather than waiting for Save, so
+  // the parent is handed the refreshed order to patch into its local state.
+  (e: 'order-updated', order: Order): void
 }>()
+
+const toast = useToast()
+const receiptInput = ref<HTMLInputElement | null>(null)
+const uploadingReceipt = ref(false)
+const deletingReceiptId = ref<string | null>(null)
+
+const receipts = computed(() => props.order?.receipts ?? [])
+
+const ACCEPTED_UPLOADS = 'application/pdf,image/jpeg,image/png,image/webp'
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function receiptUrl(receiptId: string, download = false) {
+  const base = `/api/orders/${props.order?.id}/receipts/${receiptId}`
+  return download ? `${base}?download=1` : base
+}
+
+async function onReceiptPicked(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files ?? [])
+  if (!files.length || !props.order) return
+
+  uploadingReceipt.value = true
+  try {
+    // One request per file: the route takes a single upload, and a failure
+    // part-way still leaves every earlier file attached.
+    for (const file of files) {
+      const body = new FormData()
+      body.append('file', file)
+      const res = await $fetch<{ order: Order | null }>(
+        `/api/orders/${props.order.id}/receipts`,
+        { method: 'POST', body }
+      )
+      if (res.order) emit('order-updated', res.order)
+    }
+    toast.add({
+      title: files.length > 1 ? 'Receipts attached' : 'Receipt attached',
+      color: 'success'
+    })
+  } catch (error) {
+    toast.add({
+      title: 'Upload failed',
+      description:
+        (error as { statusMessage?: string })?.statusMessage
+        ?? 'The file could not be attached.',
+      color: 'error'
+    })
+  } finally {
+    uploadingReceipt.value = false
+    // Reset so picking the same file again still fires a change event.
+    input.value = ''
+  }
+}
+
+async function removeReceipt(receiptId: string) {
+  if (!props.order) return
+  deletingReceiptId.value = receiptId
+  try {
+    const res = await $fetch<{ order: Order | null }>(
+      `/api/orders/${props.order.id}/receipts/${receiptId}`,
+      { method: 'DELETE' }
+    )
+    if (res.order) emit('order-updated', res.order)
+    toast.add({ title: 'Receipt removed', color: 'success' })
+  } catch (error) {
+    toast.add({
+      title: 'Could not remove receipt',
+      description:
+        (error as { statusMessage?: string })?.statusMessage ?? undefined,
+      color: 'error'
+    })
+  } finally {
+    deletingReceiptId.value = null
+  }
+}
 
 const isOpen = defineModel<boolean>('open', { default: false })
 
@@ -182,6 +264,94 @@ function handleSubmit() {
                 />
               </UFormField>
             </div>
+          </div>
+
+          <!-- Receipts -->
+          <div class="grid gap-3">
+            <div class="flex items-center justify-between">
+              <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-200">
+                Receipts
+              </h4>
+              <UButton
+                size="xs"
+                variant="soft"
+                icon="i-lucide-paperclip"
+                :loading="uploadingReceipt"
+                @click="receiptInput?.click()"
+              >
+                Attach
+              </UButton>
+            </div>
+
+            <input
+              ref="receiptInput"
+              type="file"
+              class="hidden"
+              :accept="ACCEPTED_UPLOADS"
+              multiple
+              @change="onReceiptPicked"
+            >
+
+            <p
+              v-if="receipts.length === 0"
+              class="text-sm text-gray-500"
+            >
+              Attach the invoice or receipt for this order &mdash; PDF, or a
+              photo of a paper receipt. Kept with the order for auditing.
+            </p>
+
+            <ul
+              v-else
+              class="grid gap-2"
+            >
+              <li
+                v-for="receipt in receipts"
+                :key="receipt.id"
+                class="flex items-center gap-2 rounded-lg border border-gray-200/60 p-2 dark:border-gray-800/60"
+              >
+                <UIcon
+                  :name="
+                    receipt.mimeType === 'application/pdf'
+                      ? 'i-lucide-file-text'
+                      : 'i-lucide-image'
+                  "
+                  class="size-4 shrink-0 text-gray-500"
+                />
+                <div class="min-w-0 flex-1">
+                  <ULink
+                    :to="receiptUrl(receipt.id)"
+                    target="_blank"
+                    class="block truncate text-sm font-medium text-primary"
+                  >
+                    {{ receipt.filename }}
+                  </ULink>
+                  <p class="truncate text-xs text-gray-500">
+                    {{ formatBytes(receipt.sizeBytes) }}
+                    <template v-if="receipt.uploadedByName">
+                      &middot; {{ receipt.uploadedByName }}
+                    </template>
+                  </p>
+                </div>
+                <UButton
+                  size="xs"
+                  variant="ghost"
+                  color="neutral"
+                  icon="i-lucide-download"
+                  title="Download"
+                  :to="receiptUrl(receipt.id, true)"
+                  external
+                />
+                <UButton
+                  size="xs"
+                  variant="ghost"
+                  color="error"
+                  icon="i-lucide-trash-2"
+                  title="Remove receipt"
+                  :loading="deletingReceiptId === receipt.id"
+                  @click="removeReceipt(receipt.id)"
+                />
+              </li>
+            </ul>
           </div>
 
           <!-- Payments -->

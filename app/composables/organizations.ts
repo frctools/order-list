@@ -15,7 +15,7 @@ export const useCurrentOrganization = () => {
 }
 
 export function useOrgs() {
-  const { client } = useAuth()
+  const { client, session } = useAuth()
   const organization = useCurrentOrganization()
   const activeOrganizationId = useCookie('activeOrganizationId')
   const toast = useToast()
@@ -70,13 +70,22 @@ export function useOrgs() {
 
       organizations.value = fullOrgs
 
-      if (!activeOrganizationId.value && fullOrgs.length > 0) {
-        const [firstOrg] = fullOrgs
-        if (firstOrg) {
-          activeOrganizationId.value = firstOrg.id
-          await selectTeam(firstOrg.id, { showToast: false })
-          console.log(`Auto-selecting first organization: ${firstOrg.name}`)
-        }
+      // The cookie is only this client's memory of the choice. The server
+      // keeps its own activeOrganizationId on the session, and that is the one
+      // every API route reads. The two drift apart whenever a session is
+      // created while the cookie survives -- a fresh sign-in starts with no
+      // active organization -- and the menu then shows a team happily while
+      // every request fails with "no organization selected". So reconcile
+      // against the session rather than trusting the cookie's presence.
+      const knownIds = fullOrgs.map(org => org.id)
+      const preferredId
+        = activeOrganizationId.value && knownIds.includes(activeOrganizationId.value)
+          ? activeOrganizationId.value
+          : fullOrgs[0]?.id
+
+      if (preferredId && session.value?.activeOrganizationId !== preferredId) {
+        activeOrganizationId.value = preferredId
+        await selectTeam(preferredId, { showToast: false })
       }
 
       return fullOrgs
