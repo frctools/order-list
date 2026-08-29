@@ -4,6 +4,7 @@ import * as z from "zod";
 import { camelCase, splitByCase } from "scule";
 import { computedAsync } from "@vueuse/core";
 import type { OrderEditorValues } from "~/types/orders";
+import { dollarsToMicros } from "~/utils/money";
 
 defineProps<{
   count: number;
@@ -396,8 +397,8 @@ const importedOrders = computed<OrderEditorValues[]>(() => {
         vendorId: details?.vendor?.id || null,
         variantId: state.variantId || undefined,
         variantTitle: state.variantTitle || undefined,
-        unitPriceCents: state.unitPrice
-          ? Math.ceil(Number(state.unitPrice) * 100)
+        unitPriceMicros: state.unitPrice
+          ? dollarsToMicros(Number(state.unitPrice))
           : undefined,
         tagIds: [],
       };

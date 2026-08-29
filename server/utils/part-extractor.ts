@@ -15,6 +15,12 @@ export interface ExtractedVariant {
   price: number | null
 }
 
+// A quantity discount tier: buy `quantity` or more, pay `unitPrice` each.
+export interface PriceBreak {
+  quantity: number
+  unitPrice: number
+}
+
 export interface ExtractedProduct {
   title: string
   description: string | null
@@ -27,6 +33,10 @@ export interface ExtractedProduct {
   variantId: string | null
   variantTitle: string | null
   variants: ExtractedVariant[]
+  // Quantity discount tiers, when the vendor publishes them (DigiKey does).
+  // Ascending by quantity; the applicable tier is the last one the ordered
+  // quantity reaches.
+  priceBreaks?: PriceBreak[]
 }
 
 export interface ExtractionResult {
@@ -36,6 +46,7 @@ export interface ExtractionResult {
   source:
     | 'shopify'
     | 'amazon'
+    | 'digikey'
     | 'json-ld'
     | 'opengraph'
     | 'scraper'
@@ -58,7 +69,9 @@ const FRC_VENDORS: Array<{ match: string, name: string }> = [
   { match: 'vexpro.com', name: 'VEXpro' },
   { match: 'ctr-electronics.com', name: 'Cross the Road Electronics' },
   { match: 'onlinemetals.com', name: 'Online Metals' },
-  { match: 'mcmaster.com', name: 'McMaster-Carr' }
+  { match: 'mcmaster.com', name: 'McMaster-Carr' },
+  { match: 'digikey.com', name: 'DigiKey' },
+  { match: 'digikey.ca', name: 'DigiKey' }
 ]
 
 // Match a hostname against a bare domain, tolerating www./store. subdomains.
@@ -401,12 +414,73 @@ function fromMcMasterUrl(urlObj: URL): ExtractedProduct | null {
   }
 }
 
+// DigiKey sits behind the same bot challenge Online Metals uses, but its URLs
+// are unusually rich — manufacturer, manufacturer part number, and DigiKey's
+// own product id are all in the path:
+//   /en/products/detail/{manufacturer}/{mpn}/{id}
+//   /product-detail/en/{manufacturer}/{mpn}/{digikeyPartNumber}/{id}  (legacy)
+export const DIGIKEY_HOSTS = ['digikey.com', 'digikey.ca']
+const DIGIKEY_MODERN = /\/products\/detail\/([^/]+)\/([^/]+)\/(\d+)/i
+const DIGIKEY_LEGACY
+  = /\/product-detail\/[a-z]{2}\/([^/]+)\/([^/]+)\/([^/]+)\/(\d+)/i
+
+// The manufacturer and part number a DigiKey link names, for callers that
+// want to look the part up properly rather than guess from the URL.
+export function digiKeyPartFromUrl(
+  url: string
+): { manufacturer: string, mpn: string } | null {
+  let urlObj: URL
+  try {
+    urlObj = new URL(url)
+  } catch {
+    return null
+  }
+  if (!DIGIKEY_HOSTS.some(domain => hostMatches(urlObj.hostname, domain))) {
+    return null
+  }
+  const match
+    = DIGIKEY_LEGACY.exec(urlObj.pathname)
+      ?? DIGIKEY_MODERN.exec(urlObj.pathname)
+  if (!match) return null
+  const mpn = decodeURIComponent(match[2]!).trim()
+  if (!mpn) return null
+  return { manufacturer: titleFromSlug(decodeURIComponent(match[1]!)), mpn }
+}
+
+function fromDigiKeyUrl(urlObj: URL): ExtractedProduct | null {
+  const match
+    = DIGIKEY_LEGACY.exec(urlObj.pathname)
+      ?? DIGIKEY_MODERN.exec(urlObj.pathname)
+  if (!match) return null
+
+  const manufacturer = titleFromSlug(decodeURIComponent(match[1]!))
+  // The manufacturer part number is what engineers call the part, and what a
+  // BOM will be written against — so it's both the name and the sku.
+  const mpn = decodeURIComponent(match[2]!).trim()
+  if (!mpn) return null
+
+  return {
+    title: manufacturer ? `${manufacturer} ${mpn}` : mpn,
+    description: null,
+    // Price is per quantity break and only lives on the page we can't read.
+    price: null,
+    currency: 'USD',
+    sku: mpn,
+    variantId: null,
+    variantTitle: null,
+    variants: []
+  }
+}
+
 const URL_ONLY_VENDORS: Array<{
   domain: string
   parse: (urlObj: URL) => ExtractedProduct | null
 }> = [
   { domain: 'onlinemetals.com', parse: fromOnlineMetalsUrl },
-  { domain: 'mcmaster.com', parse: fromMcMasterUrl }
+  { domain: 'mcmaster.com', parse: fromMcMasterUrl },
+  { domain: 'digikey.com', parse: fromDigiKeyUrl },
+  // Canadian teams order from the .ca storefront; same URL shapes.
+  { domain: 'digikey.ca', parse: fromDigiKeyUrl }
 ]
 
 // ---- Amazon --------------------------------------------------------------

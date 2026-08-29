@@ -14,7 +14,7 @@ const updateItemSchema = z
     partName: z.string().min(1).optional(),
     description: z.string().optional().transform(emptyToNull),
     quantity: z.coerce.number().int().min(1).optional(),
-    unitPriceCents: z
+    unitPriceMicros: z
       .union([z.coerce.number().int().min(0), z.literal(""), z.null()])
       .optional()
       .transform((value) => {

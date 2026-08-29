@@ -24,7 +24,7 @@ export const createOrderSchema = z.object({
       const trimmed = value.trim();
       return trimmed.length > 0 ? trimmed : null;
     }),
-  unitPriceCents: z
+  unitPriceMicros: z
     .union([
       z.coerce.number().int().min(0, "Price must be zero or more"),
       z.literal(""),
@@ -64,7 +64,7 @@ export interface OrderItemRecord {
   partName: string;
   description: string | null;
   quantity: number;
-  unitPriceCents: number | null;
+  unitPriceMicros: number | null;
   variantId: string | null;
   variantTitle: string | null;
   externalUrl: string | null;
@@ -247,7 +247,7 @@ async function fetchOrders(db: DB, where: SQL | undefined): Promise<OrderRecord[
       partName: orderItems.partName,
       description: orderItems.description,
       quantity: orderItems.quantity,
-      unitPriceCents: orderItems.unitPriceCents,
+      unitPriceMicros: orderItems.unitPriceMicros,
       variantId: orderItems.variantId,
       variantTitle: orderItems.variantTitle,
       externalUrl: orderItems.externalUrl,
@@ -292,10 +292,13 @@ async function fetchOrders(db: DB, where: SQL | undefined): Promise<OrderRecord[
 
   return orderRows.map((order) => {
     const items = itemsByOrder.get(order.id) ?? [];
-    const totalCents = items.reduce(
-      (sum, item) => sum + (item.unitPriceCents ?? 0) * item.quantity,
+    // Sum in micro-dollars so sub-cent unit prices stay exact, and round to
+    // cents once at the end rather than per line.
+    const totalMicros = items.reduce(
+      (sum, item) => sum + (item.unitPriceMicros ?? 0) * item.quantity,
       0,
     );
+    const totalCents = Math.round(totalMicros / 10_000);
     const payments = paymentsByOrder.get(order.id) ?? [];
     const paidCents = payments.reduce((sum, p) => sum + p.amountCents, 0);
     return {
@@ -361,9 +364,9 @@ async function insertLineItem(
         ? payload.description
         : null,
     quantity: payload.quantity,
-    unitPriceCents:
-      typeof payload.unitPriceCents === "number"
-        ? payload.unitPriceCents
+    unitPriceMicros:
+      typeof payload.unitPriceMicros === "number"
+        ? payload.unitPriceMicros
         : null,
     variantId: payload.variantId ?? null,
     variantTitle: payload.variantTitle ?? null,
@@ -588,7 +591,7 @@ export interface UpdateLineItemInput {
   partName?: string;
   description?: string | null;
   quantity?: number;
-  unitPriceCents?: number | null;
+  unitPriceMicros?: number | null;
   variantId?: string | null;
   variantTitle?: string | null;
   externalUrl?: string | null;
@@ -608,8 +611,8 @@ export async function updateLineItem(
   if (updates.partName !== undefined) set.partName = updates.partName;
   if (updates.description !== undefined) set.description = updates.description;
   if (updates.quantity !== undefined) set.quantity = updates.quantity;
-  if (updates.unitPriceCents !== undefined)
-    set.unitPriceCents = updates.unitPriceCents;
+  if (updates.unitPriceMicros !== undefined)
+    set.unitPriceMicros = updates.unitPriceMicros;
   if (updates.variantId !== undefined) set.variantId = updates.variantId;
   if (updates.variantTitle !== undefined)
     set.variantTitle = updates.variantTitle;

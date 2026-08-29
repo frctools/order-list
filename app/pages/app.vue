@@ -356,12 +356,12 @@
                   </td>
                   <td class="p-2 text-center text-gray-500">x{{ item.quantity }}</td>
                   <td class="p-2 text-right text-gray-500">
-                    {{ formatCurrencyFromCents(item.unitPriceCents) ?? "--" }}
+                    {{ formatMicros(item.unitPriceMicros) ?? "--" }}
                   </td>
                   <td class="p-2 text-right font-medium">
                     {{
                       formatCurrencyFromCents(
-                        (item.unitPriceCents ?? 0) * item.quantity,
+                        lineTotalCents(item.unitPriceMicros, item.quantity),
                       ) ?? "--"
                     }}
                   </td>
@@ -461,6 +461,12 @@ import type {
 } from "~/types/orders";
 import { LazyDashboardImport } from "#components";
 import { carrierTrackingUrl } from "~/utils/tracking";
+import {
+  formatCents as formatCurrencyFromCents,
+  formatMicros,
+  lineTotalCents,
+  microsToDollars,
+} from "~/utils/money";
 
 definePageMeta({ layout: "app" });
 
@@ -1067,15 +1073,19 @@ const csvColumns: { label: string; get: (o: Order, i: OrderItem) => string }[] =
   { label: "Quantity", get: (_o, i) => String(i.quantity) },
   {
     label: "Unit Price (USD)",
+    // Sub-cent unit prices are real (DigiKey quantity breaks), so export the
+    // exact figure rather than rounding it to cents.
     get: (_o, i) =>
-      i.unitPriceCents == null ? "" : (i.unitPriceCents / 100).toFixed(2),
+      i.unitPriceMicros == null
+        ? ""
+        : String(microsToDollars(i.unitPriceMicros)),
   },
   {
     label: "Line Total (USD)",
     get: (_o, i) =>
-      i.unitPriceCents == null
+      i.unitPriceMicros == null
         ? ""
-        : ((i.unitPriceCents * i.quantity) / 100).toFixed(2),
+        : (lineTotalCents(i.unitPriceMicros, i.quantity) / 100).toFixed(2),
   },
   { label: "Variant", get: (_o, i) => i.variantTitle ?? i.variantId ?? "" },
   { label: "Requested By", get: (_o, i) => i.requestedByName ?? "" },
@@ -1117,18 +1127,6 @@ async function exportOrdersCsv() {
   }
 }
 
-function formatCurrencyFromCents(value?: number | null) {
-  if (value === undefined || value === null) return null;
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 2,
-    }).format(value / 100);
-  } catch {
-    return `${(value / 100).toFixed(2)}`;
-  }
-}
 
 type ErrorPayload = {
   data?: { statusMessage?: string };

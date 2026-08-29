@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import { extractPart } from '../../utils/part-extractor'
+import { digiKeyPartFromUrl, extractPart } from '../../utils/part-extractor'
+import { fetchDigiKeyProduct, isDigiKeyConfigured } from '../../utils/digikey'
 import {
   fetchVendordProduct,
   shouldDelegateToScraper,
@@ -54,6 +55,25 @@ export default defineEventHandler(async (event) => {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 9000)
   try {
+    // DigiKey publishes an API, which beats anything readable off the page —
+    // and their pages refuse Workers anyway.
+    const digiKeyPart = digiKeyPartFromUrl(url)
+    if (digiKeyPart && isDigiKeyConfigured()) {
+      const product = await fetchDigiKeyProduct(
+        digiKeyPart.mpn,
+        controller.signal
+      )
+      if (product) {
+        return {
+          url,
+          hostname: new URL(url).hostname,
+          vendorName: 'DigiKey',
+          source: 'digikey' as const,
+          product
+        }
+      }
+    }
+
     // Some vendors refuse requests from the Worker outright, so go through the
     // scraper service first rather than burning the timeout on a refusal. If
     // it's down or blocked in turn, extractPart still has its own fallbacks.

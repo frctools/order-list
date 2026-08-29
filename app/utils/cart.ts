@@ -40,6 +40,7 @@ function resolveHost(order: Order): string | null {
 // deliberately optimistic.
 function hasSupportedPlatform(order: Order, host: string): boolean {
   if (/(^|\.)amazon\.[a-z]{2,3}(\.[a-z]{2})?$/i.test(host)) return true
+  if (/(^|\.)digikey\.(com|ca)$/i.test(host)) return true
   if (order.vendorType) return order.vendorType !== 'bigcommerce'
   return order.items.some(item => /\/products\//.test(item.externalUrl ?? ''))
 }

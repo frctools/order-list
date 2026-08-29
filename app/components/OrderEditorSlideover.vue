@@ -77,14 +77,49 @@
                 name="unitPrice"
                 label="Unit price (USD)"
               >
+                <!--
+                  step="any", not 0.01: distributors quote sub-cent prices at
+                  quantity breaks, and a cent step makes the browser refuse
+                  them with "enter a valid value".
+                -->
                 <UInput
                   v-model="formState.unitPrice"
                   type="number"
                   min="0"
-                  step="0.01"
+                  step="any"
                   placeholder="49.99"
                 />
               </UFormField>
+            </div>
+
+            <div
+              v-if="priceBreaks.length"
+              class="rounded-lg border border-gray-200/70 bg-gray-50/60 p-3 dark:border-gray-800/70 dark:bg-gray-900/40"
+            >
+              <div class="flex items-center gap-1.5 text-xs font-medium text-gray-700 dark:text-gray-300">
+                <UIcon name="i-lucide-tags" class="shrink-0" />
+                Quantity price breaks
+              </div>
+              <div class="mt-2 flex flex-wrap gap-1">
+                <UBadge
+                  v-for="tier in priceBreaks"
+                  :key="tier.quantity"
+                  size="xs"
+                  :variant="tier.quantity === activeBreak?.quantity ? 'solid' : 'subtle'"
+                  :color="tier.quantity === activeBreak?.quantity ? 'primary' : 'neutral'"
+                >
+                  {{ tier.quantity }}+ &middot; ${{ tier.unitPrice }}
+                </UBadge>
+              </div>
+              <p class="mt-2 text-xs text-gray-500">
+                <template v-if="activeBreak">
+                  Ordering {{ formState.quantity }} qualifies for the
+                  {{ activeBreak.quantity }}+ price of ${{ activeBreak.unitPrice }} each.
+                </template>
+                <template v-else>
+                  Unit price follows whichever break the quantity reaches.
+                </template>
+              </p>
             </div>
 
             <div class="grid gap-4 md:grid-cols-2">
@@ -208,6 +243,7 @@ import type {
   OrderItem,
   Tag
 } from '~/types/orders'
+import { dollarsToMicros, microsToDollars } from '~/utils/money'
 
 const props = defineProps<{
   mode: 'create' | 'edit'
@@ -292,6 +328,36 @@ const skipNextVendorLookup = ref(false)
 
 const variantOptions = ref<VariantOption[]>([])
 
+// Quantity discount tiers from the vendor (DigiKey publishes them). Held only
+// for the current lookup — prices move, so they're re-fetched rather than
+// stored on the item.
+type PriceBreak = { quantity: number, unitPrice: number }
+const priceBreaks = ref<PriceBreak[]>([])
+
+// The tier a quantity qualifies for: the last break it reaches.
+function breakForQuantity(quantity: number): PriceBreak | null {
+  let applicable: PriceBreak | null = null
+  for (const tier of priceBreaks.value) {
+    if (quantity >= tier.quantity) applicable = tier
+  }
+  return applicable
+}
+
+const activeBreak = computed(() => breakForQuantity(formState.quantity))
+
+// DigiKey links, so an existing part can pull its breaks back without
+// re-running a full lookup that would overwrite the user's edits.
+function isDigiKeyUrl(url: string): boolean {
+  try {
+    const { hostname, pathname } = new URL(url)
+    const host = hostname.toLowerCase().replace(/^www\./, '')
+    if (host !== 'digikey.com' && host !== 'digikey.ca') return false
+    return /\/products\/detail\/|\/product-detail\//i.test(pathname)
+  } catch {
+    return false
+  }
+}
+
 const tagOptions = computed(() =>
   (props.availableTags || []).map(tag => ({
     label: tag.name,
@@ -322,6 +388,16 @@ watch(
   },
   { immediate: true }
 )
+// Follow the price breaks as the quantity changes — reaching a tier is the
+// whole point of them.
+watch(
+  () => formState.quantity,
+  (quantity) => {
+    const tier = breakForQuantity(quantity)
+    if (tier) formState.unitPrice = String(tier.unitPrice)
+  }
+)
+
 const orderForm = useTemplateRef('orderForm')
 watch(
   () => formState.variantId,
@@ -347,12 +423,31 @@ watchEffect((onCleanup) => {
   const externalUrl = formState.externalUrl?.trim()
   if (!externalUrl) {
     variantOptions.value = []
+    priceBreaks.value = []
     isLookingUpVendor.value = false
     return
   }
 
   if (skipNextVendorLookup.value) {
     skipNextVendorLookup.value = false
+    // Editing an existing part: a full lookup would overwrite what's already
+    // in the form. A DigiKey part still needs its breaks back, so fetch them
+    // and take nothing else — the saved price stands until the quantity moves.
+    if (isDigiKeyUrl(externalUrl)) {
+      const breaksController = new AbortController()
+      onCleanup(() => breaksController.abort())
+      void (async () => {
+        try {
+          const extracted = await $fetch<ExtractionResponse>(
+            '/api/vendors/extract',
+            { query: { url: externalUrl }, signal: breaksController.signal }
+          )
+          priceBreaks.value = extracted.product?.priceBreaks ?? []
+        } catch {
+          priceBreaks.value = []
+        }
+      })()
+    }
     return
   }
 
@@ -450,6 +545,10 @@ async function applyExtractedProduct(data: ExtractionResponse) {
   if (product.price != null && !formState.unitPrice) {
     formState.unitPrice = String(product.price)
   }
+
+  priceBreaks.value = product.priceBreaks ?? []
+  const tier = breakForQuantity(formState.quantity)
+  if (tier) formState.unitPrice = String(tier.unitPrice)
 }
 
 async function applyScraperProduct(data: VendorProductResponse) {
@@ -507,8 +606,8 @@ function initializeFormState() {
     formState.partName = props.initialItem.partName
     formState.quantity = props.initialItem.quantity
     formState.unitPrice
-      = props.initialItem.unitPriceCents !== null
-        ? (props.initialItem.unitPriceCents / 100).toFixed(2)
+      = props.initialItem.unitPriceMicros !== null
+        ? String(microsToDollars(props.initialItem.unitPriceMicros))
         : ''
     // Vendor lives on the order, not the item, so it isn't edited here.
     formState.vendorId = ''
@@ -520,6 +619,7 @@ function initializeFormState() {
     resetFormState()
   }
   variantOptions.value = []
+  priceBreaks.value = []
 }
 
 function resetFormState() {
@@ -544,8 +644,8 @@ function handleSubmit(event: FormSubmitEvent<OrderFormSchema>) {
     quantity: event.data.quantity,
     description: event.data.description ?? undefined,
     vendorId: event.data.vendorId ?? null,
-    unitPriceCents: event.data.unitPrice != null
-      ? Math.ceil(Number(event.data.unitPrice) * 100)
+    unitPriceMicros: event.data.unitPrice != null
+      ? dollarsToMicros(Number(event.data.unitPrice))
       : undefined,
     variantId: event.data.variantId ?? undefined,
     variantTitle: event.data.variantTitle ?? undefined,
@@ -585,7 +685,15 @@ interface VariantOption {
 
 interface ExtractionResponse {
   vendorName: string
-  source: 'shopify' | 'json-ld' | 'opengraph' | 'none'
+  source:
+    | 'shopify'
+    | 'amazon'
+    | 'digikey'
+    | 'json-ld'
+    | 'opengraph'
+    | 'scraper'
+    | 'url'
+    | 'none'
   product: {
     title: string
     description: string | null
@@ -599,6 +707,7 @@ interface ExtractionResponse {
       title: string
       price: number | null
     }>
+    priceBreaks?: Array<{ quantity: number, unitPrice: number }>
   } | null
 }
 
