@@ -21,7 +21,7 @@ const VENDORD_ORIGIN = {
 // Vendors that sit behind a bot challenge, so a direct fetch from the Worker
 // only ever returns an interstitial. These go to vendord first instead of
 // wasting a round trip on a request we know will be refused.
-const DELEGATED_HOSTS = ['onlinemetals.com']
+const DELEGATED_HOSTS = ['onlinemetals.com', 'digikey.com', 'digikey.ca']
 
 export function shouldDelegateToScraper(hostname: string): boolean {
   return DELEGATED_HOSTS.some(domain => hostMatches(hostname, domain))
