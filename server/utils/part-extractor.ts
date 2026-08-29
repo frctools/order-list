@@ -416,7 +416,7 @@ const URL_ONLY_VENDORS: Array<{
 // tag at all. The real title and price are in the DOM, so read those instead
 // of letting the generic OpenGraph fallback pick up the wrapped version.
 
-export function isAmazonHost(hostname: string): boolean {
+function isAmazonHost(hostname: string): boolean {
   return /(^|\.)amazon\.[a-z]{2,3}(\.[a-z]{2})?$/i.test(hostname)
 }
 
@@ -435,15 +435,6 @@ const AMAZON_ASIN = /\/(?:dp|gp\/product|gp\/aw\/d)\/([A-Z0-9]{10})(?:[/?]|$)/i
 
 function amazonAsin(urlObj: URL): string | null {
   return AMAZON_ASIN.exec(urlObj.pathname)?.[1]?.toUpperCase() ?? null
-}
-
-// The ASIN out of a product link, for callers holding a URL string.
-export function amazonAsinFromUrl(url: string): string | null {
-  try {
-    return amazonAsin(new URL(url))
-  } catch {
-    return null
-  }
 }
 
 function tryAmazon(
