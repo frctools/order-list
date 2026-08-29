@@ -5,7 +5,6 @@ export default defineNuxtConfig({
     "@nuxt/eslint",
     "@nuxt/ui",
     "@nuxt/content",
-    "nitro-cloudflare-dev",
     "@nuxtjs/plausible",
     "@nuxtjs/mdc",
     "@sentry/nuxt/module",
@@ -72,60 +71,11 @@ export default defineNuxtConfig({
       plugins: [vue()],
       external: ["pg-native", "canvas"],
     },
-    preset: "cloudflare-module",
-    cloudflare: {
-      deployConfig: true,
-      nodeCompat: true,
-
-      wrangler: {
-        observability: {
-          logs: {
-            enabled: true,
-            head_sampling_rate: 1,
-            invocation_logs: true,
-            // "persist": true
-          },
-        },
-        // @ts-expect-error nitro types are out of date
-        vpc_services: [
-          {
-            binding: "VPC_SERVICE",
-            service_id: "019a94d0-60c0-7fb2-bf4b-7503c5426321",
-            remote: true,
-          },
-        ],
-        kv_namespaces: [
-          {
-            binding: "KV",
-            id: "b3ed2d9914954aa59cb27389cbf19ffb",
-          },
-        ],
-        d1_databases: [
-          {
-            binding: "DB",
-            database_name: "content-orders",
-            database_id: "12c94989-e82e-41b0-97b5-b8268dcb834f",
-          },
-        ],
-        routes: [
-          {
-            pattern: "orders.frctools.com",
-            custom_domain: true,
-          },
-        ],
-        version_metadata: {
-          binding: "CF_VERSION_METADATA",
-        },
-
-        compatibility_flags: ["nodejs_compat"],
-        hyperdrive: [
-          {
-            binding: "HYPERDRIVE",
-            id: "0e07ebd85b544c199aec73a44885734f",
-          },
-        ],
-      },
-    },
+    // Deployed to a DigitalOcean droplet behind Caddy, not Workers. The
+    // Cloudflare preset, its wrangler bindings (Hyperdrive, KV, D1,
+    // VPC_SERVICE) and the route are gone with it — see git history if any of
+    // that is ever wanted back.
+    preset: "node-server",
   },
 
   eslint: {

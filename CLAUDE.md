@@ -22,9 +22,38 @@ bun run dev
 bun run lint
 bun run typecheck
 
-# Production build (Cloudflare)
+# Production build (Node server output in .output/)
 bun run build
 ```
+
+## Deployment
+
+Runs on a single **DigitalOcean droplet**, not Cloudflare Workers. Caddy is the
+only process bound to a public port; everything else listens on localhost:
+
+| | |
+| --- | --- |
+| Caddy | `:80`/`:443` — TLS and reverse proxy, config in `deploy/Caddyfile` |
+| Nuxt | `127.0.0.1:3000` — `.output/server/index.mjs` under PM2 |
+| vendord | `127.0.0.1:3434` — the scraper, under PM2 |
+| Postgres | `127.0.0.1:5432` — `docker compose up -d` |
+
+`ecosystem.config.cjs` defines both PM2 processes. **Build off the droplet** —
+in CI or locally — and ship `.output/`: a Nuxt build wants more memory than a
+2 GB box has spare, and an OOM mid-build takes the running site with it.
+
+Shipping a release:
+
+```bash
+bun run build                       # locally or in CI
+rsync -a .output/ droplet:/srv/parts/.output/
+ssh droplet 'cd /srv/parts && bun run db:migrate && pm2 reload innovators-parts'
+```
+
+Migrations run **before** the reload, for the reason in the migrations note
+above. Backups are `deploy/backup-db.sh` on a nightly cron, plus weekly droplet
+snapshots; the script refuses to keep a dump that comes back suspiciously
+small, and copies off-box when `RCLONE_REMOTE` is set.
 
 Database migrations (Drizzle Kit reads `DATABASE_URL`):
 
@@ -115,6 +144,6 @@ Platform detection is the fiddly part. An order with no vendor row is identified
 - **Code style is inconsistent across the repo.** Some files use single quotes and no semicolons (the top half of `schema.ts`, `part-extractor.ts`, most of `app/composables/`), others double quotes with semicolons (`order-service.ts`, the notification tables, most API routes). Match the surrounding file rather than a repo-wide convention; ESLint stylistic config is in `nuxt.config.ts` (`commaDangle: never`, `braceStyle: 1tbs`).
 - **There are no DB transactions.** Multi-step writes — split, move, and the details update that deletes and reinserts payment rows — are sequential statements, so a failure partway through can leave inconsistent state. Keep multi-step order mutations idempotent/re-runnable.
 - **`findOrCreatePendingOrder` is check-then-insert**, so concurrent adds for the same vendor can produce two open orders. Harmless but user-visible; the parts can be merged back with `moveItemsToOrder`.
-- **`better-sqlite3` is an unused dependency** whose native build fails on Windows without Visual Studio C++ build tools. Nothing in the codebase imports it. If `bun install` fails on its build step, run `bun install --ignore-scripts` then `bun run postinstall` (`nuxt prepare`).
+- **`better-sqlite3` is load-bearing now, and its native build fails on Windows** without Visual Studio C++ build tools. It used to be genuinely unused — on Workers, `@nuxt/content` stored its data in D1 — but the `node-server` preset stores it in SQLite instead, and the built output references the driver throughout. Removing the dependency breaks `/docs` in production. On Windows, if `bun install` fails on its build step, run `bun install --ignore-scripts` then `bun run postinstall` (`nuxt prepare`); the droplet is Linux and builds it without complaint.
 - **`docker-compose.yml` pins `postgres:17`.** The unpinned `postgres` tag now resolves to PG18, which refuses to start with the volume mounted at the legacy `/var/lib/postgresql/data` path.
-- The Cloudflare-specific bindings (Hyperdrive, VPC_SERVICE, D1) are only present at runtime on Workers; dev relies on the `DATABASE_URL` fallback and the localhost scraper, so some production code paths (`import.meta.dev` branches) differ locally.
+- **Nothing Cloudflare-specific is left at runtime.** Hyperdrive, KV, D1 and the VPC_SERVICE binding are gone with the preset — `useDB()` reads `DATABASE_URL`, and the scraper is reached over localhost (`VENDORD_URL` overrides it). Dev and production now differ only in configuration, which is the main reason to have moved.

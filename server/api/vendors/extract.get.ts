@@ -79,7 +79,7 @@ export default defineEventHandler(async (event) => {
     // it's down or blocked in turn, extractPart still has its own fallbacks.
     const { hostname } = new URL(url)
     if (shouldDelegateToScraper(hostname)) {
-      const scraped = await fetchVendordProduct(event, url, controller.signal)
+      const scraped = await fetchVendordProduct(url, controller.signal)
       const mapped = scraped ? toExtractionResult(url, hostname, scraped) : null
       if (mapped) return mapped
     }

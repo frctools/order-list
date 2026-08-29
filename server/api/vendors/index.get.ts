@@ -1,23 +1,22 @@
-import type { Fetcher } from "@cloudflare/workers-types";
+import { vendordUrl } from '../../utils/vendord'
 
+// Proxies a product lookup to the vendord scraper running alongside the app.
+// It used to reach it through a Cloudflare VPC service binding; on a droplet
+// vendord is simply another process on localhost.
 export default defineEventHandler(async (event) => {
-  const fetchFn = !import.meta.dev
-    ? (event.context.cloudflare.env.VPC_SERVICE as Fetcher).fetch.bind(
-        event.context.cloudflare.env.VPC_SERVICE,
-      )
-    : fetch;
-  const url = getQuery(event).url as string;
+  const url = getQuery(event).url as string
   if (!url) {
-    throw createError({ statusCode: 400, statusMessage: "URL is required" });
+    throw createError({ statusCode: 400, statusMessage: 'URL is required' })
   }
-  const fetchUrl = new URL(
-    !import.meta.dev ? "http://localhost:3434" : "http://localhost:3001",
-  );
-  fetchUrl.searchParams.set("url", url);
 
-  return fetchFn(fetchUrl.toString(), {
-    headers: Object.fromEntries(
-      Object.entries(getHeaders(event)).filter(([_, v]) => v !== undefined),
-    ) as Record<string, string>,
-  });
-});
+  // Only what the scraper needs to look like a browser to the vendor — not
+  // the caller's cookies.
+  return fetch(vendordUrl(url), {
+    headers: {
+      'user-agent':
+        getHeader(event, 'user-agent')
+        ?? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'accept': 'application/json'
+    }
+  })
+})

@@ -21,23 +21,6 @@ export const useAuth = () =>
       provider: "pg",
       schema: { ...schema, },
     }),
-    /* secondaryStorage: !import.meta.dev ?{
-      get: (key) =>
-        (useEvent().context.cloudflare.env.KV as KVNamespace).get(
-          `_auth:${key}`,
-        ),
-      set: (key, value, ttl) => {
-        return (useEvent().context.cloudflare.env.KV as KVNamespace).put(
-          `_auth:${key}`,
-          value,
-          { expirationTtl: ttl },
-        );
-      },
-      delete: (key) =>
-        (useEvent().context.cloudflare.env.KV as KVNamespace).delete(
-          `_auth:${key}`,
-        ),
-    }: undefined, */
     experimental: {
       joins: true,
     },

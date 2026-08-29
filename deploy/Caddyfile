@@ -1,0 +1,28 @@
+# Caddy is the only thing listening publicly. It gets and renews the TLS
+# certificate on its own — no certbot, no cron, no renewal to forget.
+#
+#   sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
+#   sudo systemctl reload caddy
+
+parts.innovatorsrobotics.com {
+	encode zstd gzip
+
+	# Nuxt serves its own hashed assets; let them be cached hard.
+	@immutable path /_nuxt/*
+	header @immutable Cache-Control "public, max-age=31536000, immutable"
+
+	reverse_proxy 127.0.0.1:3000 {
+		# Better Auth builds callback URLs from the request, so it has to see
+		# the real host and scheme rather than Caddy's.
+		header_up Host {host}
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-For {remote_host}
+	}
+
+	log {
+		output file /var/log/caddy/parts.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}

@@ -1,22 +1,20 @@
 // Talking to the `vendord` scraper service.
 //
-// vendord runs outside the Worker on a normal host, so it can reach vendors
-// whose sites refuse requests coming from Workers — the reason some product
-// lookups have to be delegated rather than fetched in-process. In production
-// it's reached through the VPC service binding; in dev it's a local process.
+// vendord runs as its own process alongside the app, listening on localhost.
+// It exists because some vendors refuse requests from the app's own runtime,
+// so those product lookups get delegated to it instead.
+//
+// VENDORD_URL overrides where it lives; the default matches running it on the
+// same droplet.
 
-import type { Fetcher } from '@cloudflare/workers-types'
-import type { H3Event } from 'h3'
 import { hostMatches, vendorDisplayName } from './part-extractor'
 import type {
   ExtractedVariant,
   ExtractionResult
 } from './part-extractor'
 
-const VENDORD_ORIGIN = {
-  production: 'http://localhost:3434',
-  development: 'http://localhost:3001'
-}
+const VENDORD_ORIGIN = process.env.VENDORD_URL
+  ?? (import.meta.dev ? 'http://localhost:3001' : 'http://localhost:3434')
 
 // Vendors that sit behind a bot challenge, so a direct fetch from the Worker
 // only ever returns an interstitial. These go to vendord first instead of
@@ -27,10 +25,11 @@ export function shouldDelegateToScraper(hostname: string): boolean {
   return DELEGATED_HOSTS.some(domain => hostMatches(hostname, domain))
 }
 
-type SimpleFetch = (
-  input: string,
-  init?: { headers?: Record<string, string>, signal?: AbortSignal }
-) => Promise<{ ok: boolean, json: () => Promise<unknown> }>
+export function vendordUrl(productUrl: string): string {
+  const target = new URL(VENDORD_ORIGIN)
+  target.searchParams.set('url', productUrl)
+  return target.toString()
+}
 
 export interface VendordVariant {
   id: string
@@ -54,28 +53,15 @@ export interface VendordResponse {
 }
 
 export async function fetchVendordProduct(
-  event: H3Event,
   url: string,
   signal?: AbortSignal
 ): Promise<VendordResponse | null> {
-  const binding = event.context.cloudflare?.env?.VPC_SERVICE as
-    | Fetcher
-    | undefined
-  // The binding's fetch and the global one have incompatible RequestInit
-  // types; narrow to the little we actually use rather than unioning them.
-  const fetchFn = (
-    !import.meta.dev && binding ? binding.fetch.bind(binding) : globalThis.fetch
-  ) as unknown as SimpleFetch
-
-  const target = new URL(
-    import.meta.dev ? VENDORD_ORIGIN.development : VENDORD_ORIGIN.production
-  )
-  target.searchParams.set('url', url)
+  const target = vendordUrl(url)
 
   try {
     // Only what the scraper needs to look like a browser to the vendor —
     // never the caller's cookies or authorization.
-    const response = await fetchFn(target.toString(), {
+    const response = await fetch(target, {
       headers: {
         'user-agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
