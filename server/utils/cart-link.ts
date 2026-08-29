@@ -1,21 +1,27 @@
 // Turn an order into a one-click cart link on the vendor's own storefront, so
 // the person placing the order doesn't have to re-find every part by hand.
 //
-// Only Shopify is supported: its cart permalink (`/cart/{variantId}:{qty},...`)
-// is the one format that reliably builds a multi-line cart from a URL alone.
-//
-// The catch is that a permalink needs Shopify's *numeric variant id*, while an
-// order item's `variantId` column usually holds the vendor's SKU — that's what
-// the editor's "Variant SKU or ID" field captures. So any non-numeric value is
-// resolved through the part extractor, which reads the product JSON and hands
-// back both `sku` and `id` for every variant.
+// Three vendors can take a whole cart from a URL:
+//   Shopify  /cart/{variantId}:{qty},...      needs the numeric variant id,
+//                                             which items rarely store — they
+//                                             hold the SKU, so it's resolved
+//                                             through the part extractor
+//   Amazon   /gp/aws/cart/add.html?ASIN.n=..  needs no lookup; the ASIN is in
+//                                             every product link
+//   DigiKey  /classic/ordering/fastadd.aspx   needs DigiKey's own part number,
+//                                             resolved from the manufacturer
+//                                             part number through their API
 
 import {
   amazonAsinFromUrl,
+  digiKeyPartFromUrl,
   extractPart,
+  hostMatches,
   isAmazonHost,
+  DIGIKEY_HOSTS,
   type ExtractionResult
 } from './part-extractor'
+import { fetchDigiKeyProduct } from './digikey'
 import type { OrderRecord, OrderItemRecord } from './order-service'
 
 const SHOPIFY_VARIANT_ID = /^\d+$/
@@ -85,7 +91,18 @@ function resolveHost(order: OrderRecord): string | null {
   return hosts.size === 1 ? [...hosts][0]! : null
 }
 
-type CartPlatform = 'shopify' | 'amazon'
+type CartPlatform = 'shopify' | 'amazon' | 'digikey'
+
+// FastAdd takes DigiKey part numbers and quantities straight off a URL:
+// https://forum.digikey.com/t/digikey-fastadd-.../61356
+const DIGIKEY_FASTADD_PATH = '/classic/ordering/fastadd.aspx'
+
+// DigiKey documents ~1700 characters as the safe ceiling for a FastAdd URL.
+const DIGIKEY_URL_LIMIT = 1700
+
+// DigiKey part numbers end in -ND (296-1395-5-ND, WM1816-ND); a manufacturer
+// part number doesn't, and FastAdd only accepts the former.
+const DIGIKEY_PART_NUMBER = /-ND$/i
 
 // A vendor row names the platform outright. Without one, the host gives Amazon
 // away, and a `/products/{handle}` path is the Shopify tell — the same one the
@@ -95,6 +112,9 @@ function detectPlatform(
   host: string
 ): CartPlatform | null {
   if (order.vendorType === 'amazon' || isAmazonHost(host)) return 'amazon'
+  // Before the Shopify check: DigiKey product URLs also contain /products/,
+  // so the path heuristic below would otherwise claim them.
+  if (DIGIKEY_HOSTS.some(domain => hostMatches(host, domain))) return 'digikey'
   if (order.vendorType) return order.vendorType === 'shopify' ? 'shopify' : null
   const shopifyish = order.items.some(item =>
     /\/products\//.test(item.externalUrl ?? '')
@@ -208,6 +228,78 @@ function buildAmazonCart(
   }
 }
 
+// FastAdd wants DigiKey's own part number (296-1395-5-ND). Items store the
+// manufacturer part number instead — that's what a BOM is written against —
+// so anything that isn't already a DigiKey number gets looked up.
+async function digiKeyPartNumber(
+  item: OrderItemRecord,
+  signal?: AbortSignal
+): Promise<string | null> {
+  const stored = item.variantId?.trim()
+  if (stored && DIGIKEY_PART_NUMBER.test(stored)) return stored
+
+  const mpn
+    = stored
+      || (item.externalUrl ? digiKeyPartFromUrl(item.externalUrl)?.mpn : null)
+  if (!mpn) return null
+
+  const product = await fetchDigiKeyProduct(mpn, signal)
+  const resolved = product?.variantId?.trim()
+  return resolved && DIGIKEY_PART_NUMBER.test(resolved) ? resolved : null
+}
+
+// DigiKey's FastAdd loads a whole cart from a URL of part/quantity pairs. It
+// adds to the buyer's existing cart rather than replacing it (newcart stays
+// off), so a half-built cart isn't thrown away.
+async function buildDigiKeyCart(
+  order: OrderRecord,
+  host: string,
+  empty: Omit<CartLinkResult, 'reason'>,
+  signal?: AbortSignal
+): Promise<CartLinkResult> {
+  const resolved: { item: OrderItemRecord, part: string }[] = []
+  const excluded: CartLinkItem[] = []
+
+  for (let i = 0; i < order.items.length; i += LOOKUP_BATCH_SIZE) {
+    const batch = order.items.slice(i, i + LOOKUP_BATCH_SIZE)
+    const parts = await Promise.all(
+      batch.map(item => digiKeyPartNumber(item, signal).catch(() => null))
+    )
+    parts.forEach((part, index) => {
+      const item = batch[index]!
+      if (part) resolved.push({ item, part })
+      else excluded.push(summarize(item))
+    })
+  }
+
+  // DigiKey asks tools to identify themselves so they can attribute traffic.
+  const params = new URLSearchParams({ utm_source: 'orders.frctools.com' })
+  const included: CartLinkItem[] = []
+  const urlFor = (query: URLSearchParams) =>
+    `https://${host}${DIGIKEY_FASTADD_PATH}?${query.toString()}`
+
+  for (const { item, part } of resolved) {
+    const candidate = new URLSearchParams(params)
+    const position = included.length + 1
+    candidate.set(`part${position}`, part)
+    candidate.set(
+      `qty${position}`,
+      String(Math.max(1, Math.trunc(item.quantity)))
+    )
+    // Past their documented URL ceiling the request errors outright, so stop
+    // adding and report the rest rather than building a link that fails.
+    if (urlFor(candidate).length > DIGIKEY_URL_LIMIT) {
+      excluded.push(summarize(item))
+      continue
+    }
+    for (const [key, value] of candidate) params.set(key, value)
+    included.push(summarize(item))
+  }
+
+  if (included.length === 0) return { ...empty, reason: 'no-variants' }
+  return { url: urlFor(params), included, excluded, reason: 'ok' }
+}
+
 export async function buildCartLink(
   order: OrderRecord,
   signal?: AbortSignal
@@ -224,6 +316,9 @@ export async function buildCartLink(
   const platform = detectPlatform(order, host)
   if (!platform) return { ...empty, reason: 'unsupported-platform' }
   if (platform === 'amazon') return buildAmazonCart(order, host, empty)
+  if (platform === 'digikey') {
+    return buildDigiKeyCart(order, host, empty, signal)
+  }
 
   // Only parts we can't already read a variant id off of need a lookup.
   const needsLookup = order.items.filter(
