@@ -9,9 +9,10 @@ on:
     inputs:
       run_migrations:
         description: >-
-          Apply pending Drizzle migrations before reloading. Leave off unless
-          this release actually changes the schema, and read drizzle/ first --
-          a rename or drop discards data and cannot be rolled back here.
+          Allow a pending migration that may destroy data (a drop, rename or
+          column type change) to run. Additive migrations apply on their own
+          and do not need this. Read the SQL in drizzle/ before ticking it --
+          nothing here can roll one back.
         type: boolean
         default: false
 
@@ -69,6 +70,17 @@ jobs:
           printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
+      # Before the upload, not after: a deploy that cannot safely migrate must
+      # stop while the server is still untouched and consistent. Shipping code
+      # that queries a table its database does not have is invisible to every
+      # other check here -- the build succeeds, static pages render, and only
+      # the queries touching the new schema fail.
+      - name: Check pending migrations
+        id: migrations
+        run: |
+          applied=$(ssh -i ~/.ssh/id_ed25519 "$DEPLOY_USER@$DEPLOY_HOST" "docker exec parts-db-1 psql -U postgres -t -A -c \"select case when to_regclass('drizzle.__drizzle_migrations') is null then '' else (select string_agg(created_at::text, chr(10)) from drizzle.__drizzle_migrations) end\"")
+          echo "$applied" | bun deploy/pending-migrations.mjs ${{ inputs.run_migrations && '--allow-destructive' || '' }}
+
       # --delete so a removed route cannot linger in .output, but .env and .data
       # (@nuxt/content's seeded SQLite) are runtime state, and rsync leaves
       # excluded paths on the receiver alone. .output/server/node_modules is
@@ -96,10 +108,22 @@ jobs:
         run: ssh -i ~/.ssh/id_ed25519 "$DEPLOY_USER@$DEPLOY_HOST" "cd $APP_DIR && bun install"
 
       # Before the reload, never after: the new code queries columns the old
-      # database may not have yet.
+      # database may not have yet. Driven by what is actually pending rather
+      # than by a checkbox -- a checkbox someone forgets to tick is how the
+      # receipts feature shipped against a database with no receipts table.
       - name: Migrate
-        if: inputs.run_migrations
+        if: steps.migrations.outputs.pending != '0'
         run: ssh -i ~/.ssh/id_ed25519 "$DEPLOY_USER@$DEPLOY_HOST" "cd $APP_DIR && bun run db:migrate"
+
+      # Still before the reload: a migration that half-applied leaves the same
+      # code/schema mismatch, so confirm rather than assume.
+      - name: Verify schema is up to date
+        if: steps.migrations.outputs.pending != '0'
+        run: |
+          applied=$(ssh -i ~/.ssh/id_ed25519 "$DEPLOY_USER@$DEPLOY_HOST" "docker exec parts-db-1 psql -U postgres -t -A -c \"select case when to_regclass('drizzle.__drizzle_migrations') is null then '' else (select string_agg(created_at::text, chr(10)) from drizzle.__drizzle_migrations) end\"")
+          echo "$applied" | bun deploy/pending-migrations.mjs > /tmp/after.txt || true
+          cat /tmp/after.txt
+          grep -q 'No pending migrations' /tmp/after.txt
 
       - name: Reload
         run: |
