@@ -7,7 +7,8 @@ import {
   bigint,
   primaryKey,
   index,
-  boolean
+  boolean,
+  customType
 } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { organization, user } from './auth-schema'
@@ -135,6 +136,42 @@ export const orderPayments = pgTable(
   table => [index('order_payments_orderId_idx').on(table.orderId)]
 )
 
+// Drizzle has no bytea column, and node-postgres already maps the type to a
+// Buffer in both directions, so the custom type only has to name it.
+const bytea = customType<{ data: Buffer, driverData: Buffer }>({
+  dataType() {
+    return 'bytea'
+  }
+})
+
+// Receipts attached to a purchase order, for the audit trail. Several per
+// order is normal: a vendor invoice plus a packing slip, or one per shipment
+// when an order splits.
+//
+// The bytes live in Postgres rather than on disk deliberately. The nightly
+// backup is a pg_dump and nothing else -- anything on the filesystem is
+// covered only by the weekly droplet snapshot, so a receipt uploaded and lost
+// inside the same week would be unrecoverable. Storing it here gives receipts
+// the same restore guarantee as the orders they document.
+export const orderReceipts = pgTable(
+  'order_receipts',
+  {
+    id: text('id').primaryKey(),
+    orderId: text('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    filename: text('filename').notNull(),
+    mimeType: text('mime_type').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    content: bytea('content').notNull(),
+    uploadedBy: text('uploaded_by')
+      .notNull()
+      .references(() => user.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => [index('order_receipts_orderId_idx').on(table.orderId)]
+)
+
 export const ordersRelations = relations(orders, ({ one, many }) => ({
   organization: one(organization, {
     fields: [orders.organizationId],
@@ -145,7 +182,19 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
     references: [vendors.id]
   }),
   items: many(orderItems),
-  payments: many(orderPayments)
+  payments: many(orderPayments),
+  receipts: many(orderReceipts)
+}))
+
+export const orderReceiptsRelations = relations(orderReceipts, ({ one }) => ({
+  order: one(orders, {
+    fields: [orderReceipts.orderId],
+    references: [orders.id]
+  }),
+  uploader: one(user, {
+    fields: [orderReceipts.uploadedBy],
+    references: [user.id]
+  })
 }))
 
 export const orderPaymentsRelations = relations(orderPayments, ({ one }) => ({

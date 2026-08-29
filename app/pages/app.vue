@@ -444,6 +444,7 @@
       :loading="isDetailsSubmitting"
       :payment-methods="paymentMethods"
       @submit="handleDetailsSubmit"
+      @order-updated="upsertOrder"
     />
   </div>
 </template>

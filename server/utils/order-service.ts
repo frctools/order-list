@@ -4,11 +4,13 @@ import {
   orders,
   orderItems,
   orderPayments,
+  orderReceipts,
   vendors,
   orderTags,
   tags,
 } from "./schema";
 import { user as authUser } from "./auth-schema";
+import type { OrderReceiptRecord } from "./receipt-service";
 import { eq, and, inArray, isNull, sql, desc, asc, type SQL } from "drizzle-orm";
 
 // A line item (part) is added with a vendor; the vendor determines which
@@ -108,6 +110,9 @@ export interface OrderRecord {
   totalCents: number;
   payments: OrderPaymentRecord[];
   paidCents: number;
+  // Metadata only. The bytes are fetched one at a time by the download route,
+  // so listing orders never drags receipt content through memory.
+  receipts: OrderReceiptRecord[];
   // Items + shipping + tax.
   grandTotalCents: number;
 }
@@ -240,6 +245,29 @@ async function fetchOrders(db: DB, where: SQL | undefined): Promise<OrderRecord[
     paymentsByOrder.set(p.orderId, list);
   }
 
+  const receiptRows = await db
+    .select({
+      id: orderReceipts.id,
+      orderId: orderReceipts.orderId,
+      filename: orderReceipts.filename,
+      mimeType: orderReceipts.mimeType,
+      sizeBytes: orderReceipts.sizeBytes,
+      uploadedBy: orderReceipts.uploadedBy,
+      uploadedByName: authUser.name,
+      createdAt: orderReceipts.createdAt,
+    })
+    .from(orderReceipts)
+    .leftJoin(authUser, eq(orderReceipts.uploadedBy, authUser.id))
+    .where(inArray(orderReceipts.orderId, orderIds))
+    .orderBy(asc(orderReceipts.createdAt));
+
+  const receiptsByOrder = new Map<string, OrderReceiptRecord[]>();
+  for (const r of receiptRows) {
+    const list = receiptsByOrder.get(r.orderId) ?? [];
+    list.push(r);
+    receiptsByOrder.set(r.orderId, list);
+  }
+
   const itemRows = await db
     .select({
       id: orderItems.id,
@@ -308,6 +336,7 @@ async function fetchOrders(db: DB, where: SQL | undefined): Promise<OrderRecord[
       totalCents,
       payments,
       paidCents,
+      receipts: receiptsByOrder.get(order.id) ?? [],
       grandTotalCents:
         totalCents + (order.shippingCents ?? 0) + (order.taxCents ?? 0),
     };
