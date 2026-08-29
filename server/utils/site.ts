@@ -17,8 +17,14 @@ export const SITE_URL = 'https://parts.innovatorsrobotics.com'
 export const SITE_HOST = new URL(SITE_URL).host
 
 // Sending from these needs the domain verified in Resend.
-export const EMAIL_FROM_INVITES = `hello@${SITE_HOST}`
-export const EMAIL_FROM_NOTIFICATIONS = `notifications@${SITE_HOST}`
+//
+// The display name is not decoration: a bare address is one of the cheaper
+// signals a filter reads as machine-generated, and these are the first mails a
+// brand-new sending domain will ever send, when it has no reputation to lean
+// on. Resend accepts the "Name <address>" form directly.
+export const EMAIL_FROM_INVITES = `${SITE_NAME} <hello@${SITE_HOST}>`
+export const EMAIL_FROM_NOTIFICATIONS
+  = `${SITE_NAME} <notifications@${SITE_HOST}>`
 
 // The app itself, for links out of an email.
 export const APP_URL = `${SITE_URL}/app`

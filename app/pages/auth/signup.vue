@@ -4,6 +4,7 @@
       v-if="mode !== 'closed'"
       :fields="fields"
       :schema="schema"
+      :providers="providerButtons"
       :title="title"
       :submit="{ label: 'Create account' }"
       @submit="onSubmit"
@@ -101,6 +102,10 @@ const invitationId = computed(() => {
 const { data: status } = await useFetch('/api/signup-status', {
   query: { invitation: invitationId }
 })
+
+// Land back on the invitation after Google, so an invited person who signs up
+// with Google still gets the invitation accepted.
+const { providerButtons } = useSocialAuth(() => redirectTarget.value)
 
 const mode = computed(() => status.value?.mode ?? 'closed')
 const invitedEmail = computed(() => status.value?.email ?? '')
