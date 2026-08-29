@@ -1,0 +1,119 @@
+name: deploy
+
+# Never triggered by pull_request: this job holds the production deploy key and
+# the repo is a public fork, so a PR from anyone must not be able to reach it.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_migrations:
+        description: >-
+          Apply pending Drizzle migrations before reloading. Leave off unless
+          this release actually changes the schema, and read drizzle/ first --
+          a rename or drop discards data and cannot be rolled back here.
+        type: boolean
+        default: false
+
+# One deploy at a time, and never cancel one part-way: a cancelled run can
+# leave the droplet with files copied but nothing reloaded.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  DEPLOY_HOST: 67.207.85.228
+  DEPLOY_USER: parts
+  APP_DIR: /srv/parts
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Gate approvals, if the `production` environment has required reviewers.
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # ci.yml runs these too, but it does not gate this workflow, and shipping
+      # a build that does not typecheck is worse than a slow deploy.
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Build app
+        run: bun run build
+
+      - name: Build vendord
+        run: cd vendord && bunx nitro build
+
+      # Written inline rather than through a third-party action, which would
+      # otherwise get read access to the production key.
+      - name: Configure SSH
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      # --delete so a removed route cannot linger in .output, but .env and the
+      # installed node_modules are excluded and rsync leaves excluded paths on
+      # the receiver alone. .output/server/node_modules is Nitro's traced
+      # dependency copy; the droplet resolves from its own node_modules
+      # instead, which it needs anyway for drizzle-kit.
+      - name: Upload
+        run: |
+          rsync -az --delete \
+            -e "ssh -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -i ~/.ssh/id_ed25519" \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='node_modules' \
+            --exclude='.nuxt' \
+            --exclude='.env' \
+            --exclude='.output/server/node_modules' \
+            --exclude='vendord/node_modules' \
+            --exclude='.wrangler' \
+            ./ "$DEPLOY_USER@$DEPLOY_HOST:$APP_DIR/"
+
+      # A full install, not --production: .output does not vendor its
+      # dependencies (better-sqlite3 is resolved from node_modules at runtime,
+      # and /docs breaks without it) and drizzle-kit is a devDependency.
+      - name: Install dependencies on the droplet
+        run: ssh -i ~/.ssh/id_ed25519 "$DEPLOY_USER@$DEPLOY_HOST" "cd $APP_DIR && bun install"
+
+      # Before the reload, never after: the new code queries columns the old
+      # database may not have yet.
+      - name: Migrate
+        if: inputs.run_migrations
+        run: ssh -i ~/.ssh/id_ed25519 "$DEPLOY_USER@$DEPLOY_HOST" "cd $APP_DIR && bun run db:migrate"
+
+      - name: Reload
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$DEPLOY_USER@$DEPLOY_HOST" \
+            "cd $APP_DIR && pm2 reload ecosystem.config.cjs --update-env && pm2 save"
+
+      - name: Smoke test
+        run: |
+          set -e
+          for i in $(seq 1 10); do
+            code=$(curl -s -o /dev/null -m 10 -w '%{http_code}' https://parts.innovatorsrobotics.com/ || echo 000)
+            echo "attempt $i: HTTP $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 6
+          done
+          echo "site did not come back healthy"
+          ssh -i ~/.ssh/id_ed25519 "$DEPLOY_USER@$DEPLOY_HOST" "pm2 list; pm2 logs --nostream --lines 40" || true
+          exit 1
