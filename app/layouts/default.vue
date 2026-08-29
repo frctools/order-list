@@ -7,9 +7,9 @@ useHead({
   }
 })
 
-const title = 'FRCTools Orders'
+const title = 'Innovators Parts'
 const description
-  = 'Manage and track your FRC team orders efficiently with FRCTools Orders.'
+  = 'Manage and track your FRC team orders efficiently with Innovators Parts.'
 
 useSeoMeta({
   title,
@@ -26,7 +26,7 @@ useSeoMeta({
         <NuxtLink
           class="font-bold font-display text-3xl text-blue-950 dark:text-white flex justify-center items-center gap-2"
           to="/"
-        >FRCTools <span class="md:inline hidden">Orders</span></NuxtLink>
+        >Innovators <span class="md:inline hidden">Parts</span></NuxtLink>
         <UButton
           to="/search"
           icon="i-lucide-search"
@@ -55,7 +55,13 @@ useSeoMeta({
     <UFooter>
       <template #left>
         <p class="text-sm text-muted">
-          Built by Graham • © {{ new Date().getFullYear() }}
+          Innovators Parts — Powered by
+          <ULink
+            to="https://github.com/frctools/order-list"
+            target="_blank"
+            class="underline underline-offset-2"
+          >FRCTools</ULink>, built by Graham Howard
+          • © {{ new Date().getFullYear() }}
         </p>
       </template>
 
@@ -73,10 +79,10 @@ useSeoMeta({
           to="https://www.buymeacoffee.com/grahamsh"
           target="_blank"
           icon="i-lucide-heart"
-          aria-label="Donate"
+          aria-label="Support FRCTools"
           class="text-pink-500"
           variant="ghost"
-          label="Support Development"
+          label="Support FRCTools"
         />
         <UButton
           to="https://github.com/frctools/order-list"

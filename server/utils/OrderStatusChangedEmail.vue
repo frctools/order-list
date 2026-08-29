@@ -11,6 +11,7 @@ import {
   Section,
   Text,
 } from "@vue-email/components";
+import { APP_URL, SETTINGS_URL } from './site'
 
 defineProps({
   userName: String,
@@ -103,7 +104,7 @@ const imageUrl = `data:image/svg+xml;base64,CjxzdmcgeG1sbnM9Imh0dHA6Ly93d3cudzMu
             :src="`${imageUrl}`"
             width="49"
             height="49"
-            alt="FRCTools Orders Logo"
+            alt="Innovators Parts Logo"
           />
           <Hr :style="hr" />
           <Text :style="h1"> Order Status Updated </Text>
@@ -122,20 +123,20 @@ const imageUrl = `data:image/svg+xml;base64,CjxzdmcgeG1sbnM9Imh0dHA6Ly93d3cudzMu
             <span :style="badge">{{ newStatus }}</span>
           </Text>
           <Button
-            :href="`https://orders.frctools.com/app?order=${orderId}`"
+            :href="`${APP_URL}?order=${orderId}`"
             :style="button"
           >
             View Order
           </Button>
           <Hr :style="hr" />
-          <Text :style="paragraph"> — FRCTools Orders </Text>
+          <Text :style="paragraph"> — Innovators Parts </Text>
           <Hr :style="hr" />
           <Text :style="footer">
             You received this email because you're a member of
             {{ organizationName }}.
             <br />
             <a
-              href="https://orders.frctools.com/settings"
+              :href="SETTINGS_URL"
               style="color: #4f46e5; text-decoration: underline"
             >
               Manage notification preferences

@@ -13,14 +13,14 @@ export default defineAppConfig({
       links: [
         {
           icon: 'i-lucide-star',
-          label: 'Star on GitHub',
+          label: 'FRCTools on GitHub',
           to: 'https://github.com/frctools/order-list',
           target: '_blank'
         },
         {
           icon: 'i-lucide-external-link',
           label: 'Go to App',
-          to: 'https://orders.frctools.com',
+          to: 'https://parts.innovatorsrobotics.com',
           target: '_blank'
         }
       ]

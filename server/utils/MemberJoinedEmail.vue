@@ -11,6 +11,7 @@ import {
   Section,
   Text,
 } from "@vue-email/components";
+import { APP_URL } from './site'
 
 defineProps<{
   userName: string;
@@ -89,7 +90,7 @@ const imageUrl = `data:image/svg+xml;base64,CjxzdmcgeG1sbnM9Imh0dHA6Ly93d3cudzMu
             :src="`${imageUrl}`"
             width="49"
             height="49"
-            alt="FRCTools Orders Logo"
+            alt="Innovators Parts Logo"
           />
           <Hr :style="hr" />
           <Text :style="h1"> New Team Member </Text>
@@ -104,14 +105,14 @@ const imageUrl = `data:image/svg+xml;base64,CjxzdmcgeG1sbnM9Imh0dHA6Ly93d3cudzMu
             Welcome them and get started collaborating on orders and projects
             together!
           </Text>
-          <Button href="https://orders.frctools.com/app" :style="button">
+          <Button :href="APP_URL" :style="button">
             View Team
           </Button>
           <Hr :style="hr" />
-          <Text :style="paragraph"> — FRCTools Orders </Text>
+          <Text :style="paragraph"> — Innovators Parts </Text>
           <Hr :style="hr" />
           <Text :style="footer">
-            © {{ new Date().getFullYear() }} FRCTools Orders
+            © {{ new Date().getFullYear() }} Innovators Parts
           </Text>
         </Section>
       </Container>

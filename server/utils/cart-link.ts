@@ -39,6 +39,7 @@ import {
   playingWithFusionProductId,
   PLAYING_WITH_FUSION_HOSTS
 } from './playing-with-fusion'
+import { SITE_HOST } from './site'
 import type { OrderRecord, OrderItemRecord } from './order-service'
 
 const SHOPIFY_VARIANT_ID = /^\d+$/
@@ -333,7 +334,7 @@ async function buildDigiKeyCart(
   }
 
   // DigiKey asks tools to identify themselves so they can attribute traffic.
-  const params = new URLSearchParams({ utm_source: 'orders.frctools.com' })
+  const params = new URLSearchParams({ utm_source: SITE_HOST })
   const included: CartLinkItem[] = []
   const urlFor = (query: URLSearchParams) =>
     `https://${host}${DIGIKEY_FASTADD_PATH}?${query.toString()}`

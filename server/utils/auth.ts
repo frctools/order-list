@@ -7,6 +7,7 @@ import { Resend } from "resend";
 import InviteEmail from "./InviteEmail.vue";
 import { render } from "@vue-email/render";
 import * as schema from "./auth-schema";
+import { EMAIL_FROM_INVITES, SITE_URL } from "./site";
 
 export const useAuth = () =>
   betterAuth({
@@ -48,9 +49,7 @@ export const useAuth = () =>
           const resend = new Resend(process.env.RESEND_KEY);
 
           const inviteLink = `${
-            import.meta.dev
-              ? "http://localhost:3000"
-              : "https://orders.frctools.com"
+            import.meta.dev ? "http://localhost:3000" : SITE_URL
           }/accept-invitation/${data.id}`;
           const props = {
             organizationName: data.organization.name,
@@ -62,7 +61,7 @@ export const useAuth = () =>
           });
           const text = await render(InviteEmail, props, { plainText: true });
           await resend.emails.send({
-            from: "hello@orders.frctools.com",
+            from: EMAIL_FROM_INVITES,
             to: data.email,
             subject: `You're invited to join ${data.organization.name}`,
             html,

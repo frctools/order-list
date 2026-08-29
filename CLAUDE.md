@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-FRCTools Orders (`orderr`) — an order-list app for FRC robotics teams. Nuxt 4 app deployed to **Cloudflare Workers** (Nitro `cloudflare-module` preset), backed by Postgres via Drizzle, with Better Auth for auth/organizations and Meilisearch for product search.
+Innovators Parts (`innovators-parts`) — a parts ordering app for FRC robotics teams, branded *Innovators Parts — Powered by FRCTools*. It's a fork of [FRCTools Orders](https://github.com/frctools/order-list) by Graham Howard (MIT; original copyright retained in `LICENSE`), diverged far enough that changes aren't sent upstream. Nuxt 4 app deployed to **Cloudflare Workers** (Nitro `cloudflare-module` preset), backed by Postgres via Drizzle, with Better Auth for auth/organizations and Meilisearch for product search.
 
 ## Commands
 

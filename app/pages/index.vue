@@ -2,7 +2,7 @@
   <div>
     <UPageHero
       title="Track team orders with ease"
-      description="Plan, purchase, and receive parts in one place. FRCTools Orders gives your team a clear board and table view across the entire purchasing pipeline."
+      description="Plan, purchase, and receive parts in one place. Innovators Parts gives your team a clear board and table view across the entire purchasing pipeline."
       :links="heroLinks"
     >
       <template #top>
@@ -36,7 +36,7 @@ import { computed } from 'vue'
 
 const { user } = useAuth()
 
-const pageTitle = 'FRCTools Orders: Track and manage purchases'
+const pageTitle = 'Innovators Parts: Track and manage purchases'
 const pageDescription
   = 'An orders board for FRC teams. Create requests, place orders, and track spending.'
 
@@ -94,7 +94,7 @@ const features = [
   {
     title: 'Smart product inputting',
     description:
-      'Just paste a URL, and FRCTools Orders will automatically fetch product details like title, vendor, and pricing from popular suppliers.',
+      'Just paste a URL, and Innovators Parts will automatically fetch product details like title, vendor, and pricing from popular suppliers.',
     icon: 'i-lucide-clipboard-check'
   },
   {
