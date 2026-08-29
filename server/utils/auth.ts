@@ -3,7 +3,12 @@ import { useDB } from "./db";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { organization } from "better-auth/plugins";
 import { Resend } from "resend";
-// @ts-expect-error Vue-Email SFC has no type declaration in the server project
+// Vue-Email SFC. vue-tsc gives these real types by pulling the SFC into the
+// program, but only where its Vue language plugin is active -- without it the
+// import resolves to nothing. The asserting form of this directive is reported
+// as unused wherever the SFC does resolve, so use the non-asserting one.
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 import InviteEmail from "./InviteEmail.vue";
 import { render } from "@vue-email/render";
 import { APIError } from "better-auth/api";

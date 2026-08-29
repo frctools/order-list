@@ -267,13 +267,38 @@ function deleteRow(key: string) {
   deletedKeys.value = new Set([...deletedKeys.value, key]);
 }
 
-function getInputMenuItems(key: string) {
+interface ProductMenuItem {
+  label: string;
+  description: string;
+  value: SearchHit;
+}
+
+function getInputMenuItems(key: string): ProductMenuItem[] {
   const hits = lookedUpParts.value.get(key) || [];
   return hits.map((hit) => ({
-    label: hit.title,
-    description: hit.skus ? `SKU: ${hit.skus[0]}` : hit.vendor || "",
+    // SearchHit carries an index signature, so anything outside its declared
+    // fields arrives as unknown and has to be narrowed before use.
+    label: String(hit.title ?? hit.name ?? ""),
+    description:
+      Array.isArray(hit.skus) && hit.skus.length > 0
+        ? `SKU: ${String(hit.skus[0])}`
+        : hit.vendor || "",
     value: hit,
   }));
+}
+
+// UInputMenu types its #item slot against the generic InputMenuItem union
+// rather than the array it was given, so narrow the payload back to the shape
+// getInputMenuItems actually produces and flatten it for the template.
+function productOption(item: unknown) {
+  const option = item as ProductMenuItem | null;
+  const image = option?.value?.image;
+
+  return {
+    label: option?.label ?? "",
+    description: option?.description ?? "",
+    image: typeof image === "string" ? image : "",
+  };
 }
 
 function getVariantOptions(key: string): VariantOption[] {
@@ -501,19 +526,19 @@ async function handleImport() {
               <template #item="{ item }">
                 <div class="flex gap-2 items-center">
                   <img
-                    v-if="item.value.image"
-                    :src="item.value.image"
+                    v-if="productOption(item).image"
+                    :src="productOption(item).image"
                     alt=""
                     class="h-6 w-6 object-contain rounded-md"
                   />
                   <div class="flex flex-col py-1">
                     <span class="font-medium text-sm truncate">{{
-                      item.label
+                      productOption(item).label
                     }}</span>
                     <span
-                      v-if="item.description"
+                      v-if="productOption(item).description"
                       class="text-xs text-gray-500 truncate"
-                      >{{ item.description }}</span
+                      >{{ productOption(item).description }}</span
                     >
                   </div>
                 </div>

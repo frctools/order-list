@@ -3,9 +3,19 @@ import { useAuth } from "./auth";
 import { emailService } from "./email-service";
 import { member } from "./auth-schema";
 import { eq } from "drizzle-orm";
-// @ts-expect-error Vue-Email SFC has no type declaration in the server project
+// Vue-Email SFC. vue-tsc gives these real types by pulling the SFC into the
+// program, but only where its Vue language plugin is active -- without it the
+// import resolves to nothing. The asserting form of this directive is reported
+// as unused wherever the SFC does resolve, so use the non-asserting one.
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 import OrderCreatedEmail from "./OrderCreatedEmail.vue";
-// @ts-expect-error Vue-Email SFC has no type declaration in the server project
+// Vue-Email SFC. vue-tsc gives these real types by pulling the SFC into the
+// program, but only where its Vue language plugin is active -- without it the
+// import resolves to nothing. The asserting form of this directive is reported
+// as unused wherever the SFC does resolve, so use the non-asserting one.
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 import OrderStatusChangedEmail from "./OrderStatusChangedEmail.vue";
 
 export const notificationHelpers = {

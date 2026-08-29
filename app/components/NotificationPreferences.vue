@@ -104,7 +104,7 @@ const digestTime = computed({
 });
 const digestTimeFormatted = computed(() => {
   if (!preferences.value?.digestTime) return "not set";
-  const [hours, minutes] = preferences.value.digestTime.split(":");
+  const [hours = "0", minutes = "00"] = preferences.value.digestTime.split(":");
   const hour = parseInt(hours);
   const ampm = hour >= 12 ? "PM" : "AM";
   const displayHour = hour % 12 || 12;
