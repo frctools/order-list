@@ -34,7 +34,8 @@ export type OrderEditorValues = {
   quantity: number
   description: string | undefined
   vendorId: string | null
-  unitPriceCents: number | undefined
+  // Micro-dollars (1e-6 USD); see app/utils/money.ts.
+  unitPriceMicros: number | undefined
   variantId: string | undefined
   variantTitle: string | undefined
   externalUrl: string | undefined

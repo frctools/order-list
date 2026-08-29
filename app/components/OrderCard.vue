@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { TinyColor } from '@ctrl/tinycolor'
 import { useStatusLookup } from '~/composables/status'
 import { carrierTrackingUrl } from '~/utils/tracking'
+import { formatCents as formatCurrencyFromCents, formatMicros, lineTotalCents } from '~/utils/money'
 import type { Order, OrderItem } from '~/types/orders'
 
 const props = defineProps<{
@@ -69,21 +70,8 @@ const vendorLabel = computed(
   () => props.order.vendorName?.trim() || 'No vendor'
 )
 
-function formatCurrencyFromCents(value?: number | null) {
-  if (value === undefined || value === null) return null
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2
-    }).format(value / 100)
-  } catch {
-    return `${(value / 100).toFixed(2)}`
-  }
-}
-
 function itemTotalCents(item: OrderItem) {
-  return (item.unitPriceCents ?? 0) * item.quantity
+  return lineTotalCents(item.unitPriceMicros, item.quantity)
 }
 
 const textColor = (colorStr: string) => {
@@ -151,8 +139,8 @@ const textColor = (colorStr: string) => {
             <span class="shrink-0 text-xs text-gray-500">x{{ item.quantity }}</span>
           </div>
           <div class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-500">
-            <span v-if="item.unitPriceCents !== null">
-              {{ formatCurrencyFromCents(item.unitPriceCents) }}
+            <span v-if="item.unitPriceMicros !== null">
+              {{ formatMicros(item.unitPriceMicros) }}
               <span class="text-gray-400">each</span>
             </span>
             <span v-if="itemTotalCents(item) > 0" class="font-medium">

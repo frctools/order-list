@@ -63,6 +63,8 @@ Orders are **two-level**: an order is a per-vendor *purchase order header*, and 
 - `orderTags` — tags attach to **line items** (`orderItemId`), not to orders.
 - `orderPayments` — split payment lines (`credit_card` / `voucher` / `coupon` / `other`), so one order can be part credit card, part Kit-of-Parts voucher, part coupon.
 
+**Money units** — item unit prices are stored as **micro-dollars** (1e-6 USD) in `orderItems.unitPriceMicros`, because distributors quote sub-cent prices at quantity breaks (DigiKey goes to five decimals) and whole cents rounded them away. Everything else — shipping, tax, payments, and all order totals — stays in whole cents, which is what actually gets paid. `app/utils/money.ts` owns the conversions and the display rule: a unit price renders as plain money when it lands on whole cents (`$2.40`) and only spells out the extra digits when it genuinely carries them (`$0.231`). Line totals sum in micros and round to cents once, never per line.
+
 Totals are derived in JS rather than stored: `totalCents` (items), `paidCents` (payments), `grandTotalCents` (items + shipping + tax).
 
 **Grouping rule** — parts are added with a vendor, and `findOrCreatePendingOrder` drops each part into the org's open (`to_order`) order for that vendor, creating one if none exists. `vendorKey()` mirrors that grouping so moves can be validated: parts only combine within the same vendor, and only between `to_order` orders. Any source order left empty (by a split, a move, or an item delete) is deleted.

@@ -238,6 +238,7 @@ import type {
   OrderItem,
   Tag
 } from '~/types/orders'
+import { dollarsToMicros, microsToDollars } from '~/utils/money'
 
 const props = defineProps<{
   mode: 'create' | 'edit'
@@ -600,8 +601,8 @@ function initializeFormState() {
     formState.partName = props.initialItem.partName
     formState.quantity = props.initialItem.quantity
     formState.unitPrice
-      = props.initialItem.unitPriceCents !== null
-        ? (props.initialItem.unitPriceCents / 100).toFixed(2)
+      = props.initialItem.unitPriceMicros !== null
+        ? String(microsToDollars(props.initialItem.unitPriceMicros))
         : ''
     // Vendor lives on the order, not the item, so it isn't edited here.
     formState.vendorId = ''
@@ -638,8 +639,8 @@ function handleSubmit(event: FormSubmitEvent<OrderFormSchema>) {
     quantity: event.data.quantity,
     description: event.data.description ?? undefined,
     vendorId: event.data.vendorId ?? null,
-    unitPriceCents: event.data.unitPrice != null
-      ? Math.ceil(Number(event.data.unitPrice) * 100)
+    unitPriceMicros: event.data.unitPrice != null
+      ? dollarsToMicros(Number(event.data.unitPrice))
       : undefined,
     variantId: event.data.variantId ?? undefined,
     variantTitle: event.data.variantTitle ?? undefined,

@@ -4,6 +4,7 @@ import {
   text,
   timestamp,
   integer,
+  bigint,
   primaryKey,
   index,
   boolean
@@ -82,7 +83,10 @@ export const orderItems = pgTable(
     partName: text('part_name').notNull(),
     description: text('description'),
     quantity: integer('quantity').default(1).notNull(),
-    unitPriceCents: integer('unit_price_cents'),
+    // Micro-dollars (1e-6 USD). Distributors quote sub-cent unit prices at
+    // quantity breaks — DigiKey goes to five decimals — so whole cents would
+    // round the real price away. Integer keeps the arithmetic exact.
+    unitPriceMicros: bigint('unit_price_micros', { mode: 'number' }),
     variantId: text('variant_id'),
     variantTitle: text('variant_title'),
     externalUrl: text('external_url'),
