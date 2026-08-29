@@ -77,11 +77,16 @@
                 name="unitPrice"
                 label="Unit price (USD)"
               >
+                <!--
+                  step="any", not 0.01: distributors quote sub-cent prices at
+                  quantity breaks, and a cent step makes the browser refuse
+                  them with "enter a valid value".
+                -->
                 <UInput
                   v-model="formState.unitPrice"
                   type="number"
                   min="0"
-                  step="0.01"
+                  step="any"
                   placeholder="49.99"
                 />
               </UFormField>
