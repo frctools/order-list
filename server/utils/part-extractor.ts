@@ -314,7 +314,12 @@ function getMeta(document: ParsedDoc, selectors: string[]): string | null {
   return null
 }
 
-// ---- URL-only fallback ---------------------------------------------------
+// ---- URL-only vendors ----------------------------------------------------
+
+// Some vendors' product pages can't be read by a server at all — the details
+// arrive via client-side rendering, or the site refuses automated requests.
+// Their URLs still identify the part, and parsing one costs no request, so
+// these hosts skip the network entirely.
 
 // Online Metals sits behind a bot challenge, so a server fetch of the product
 // page comes back as an interstitial rather than the listing — none of the
@@ -359,6 +364,43 @@ function fromOnlineMetalsUrl(urlObj: URL): ExtractedProduct | null {
   }
 }
 
+// McMaster-Carr renders product pages entirely client-side, marks them
+// `noindex, noarchive`, and disallows the endpoints that serve the data in
+// robots.txt — a fetch returns a shell whose only title is "McMaster-Carr",
+// which would be worse than nothing. We never request their pages.
+//
+// The part number is the whole identifier and it's right in the path:
+//   /91290A115/                          the part
+//   /91290A115-alloy-steel-screws/       same, with an SEO slug
+const MCMASTER_PART = /^\/(\d{3,6}[A-Z]\d{1,5})(?:-([a-z0-9-]+))?\/?$/i
+
+function fromMcMasterUrl(urlObj: URL): ExtractedProduct | null {
+  const match = MCMASTER_PART.exec(urlObj.pathname)
+  if (!match) return null
+  const [, partNumber, slug] = match
+
+  return {
+    // Without the page there's no description; the part number is a name a
+    // team will recognise, and they can rename it.
+    title: slug ? titleFromSlug(slug) : partNumber!.toUpperCase(),
+    description: null,
+    price: null,
+    currency: 'USD',
+    sku: partNumber!.toUpperCase(),
+    variantId: null,
+    variantTitle: null,
+    variants: []
+  }
+}
+
+const URL_ONLY_VENDORS: Array<{
+  domain: string
+  parse: (urlObj: URL) => ExtractedProduct | null
+}> = [
+  { domain: 'onlinemetals.com', parse: fromOnlineMetalsUrl },
+  { domain: 'mcmaster.com', parse: fromMcMasterUrl }
+]
+
 // ---- Orchestration -------------------------------------------------------
 
 export async function extractPart(
@@ -368,6 +410,22 @@ export async function extractPart(
   const urlObj = new URL(url)
   const hostname = urlObj.hostname
   const mappedVendor = friendlyVendorName(hostname)
+  const vendorName = mappedVendor ?? titleCaseHost(hostname)
+
+  // 0. Vendors whose pages a server can't read. Fetching them either fails or
+  // returns a shell we'd misread as real details, so the URL is the only
+  // source — and checking it costs no request.
+  const urlOnly = URL_ONLY_VENDORS.find(v => hostMatches(hostname, v.domain))
+  if (urlOnly) {
+    const product = urlOnly.parse(urlObj)
+    return {
+      url,
+      hostname,
+      vendorName,
+      source: product ? 'url' : 'none',
+      product
+    }
+  }
 
   // 1. Shopify JSON — richest data, so try it first for any /products/ URL.
   const shopify = await tryShopify(urlObj, signal)
@@ -485,21 +543,6 @@ export async function extractPart(
           variantTitle: null,
           variants: []
         }
-      }
-    }
-  }
-
-  // 4. Nothing readable came back. For vendors we can decode a URL for, that
-  // still beats an empty form — the buyer only has to add the price.
-  if (hostMatches(hostname, 'onlinemetals.com')) {
-    const product = fromOnlineMetalsUrl(urlObj)
-    if (product) {
-      return {
-        url,
-        hostname,
-        vendorName: mappedVendor ?? titleCaseHost(hostname),
-        source: 'url',
-        product
       }
     }
   }
