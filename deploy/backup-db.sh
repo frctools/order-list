@@ -15,7 +15,9 @@ set -euo pipefail
 
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/postgres}"
 KEEP_DAYS="${KEEP_DAYS:-14}"
-CONTAINER="${PG_CONTAINER:-order-list-db-1}"
+# Compose names the container after its project directory, which is the repo
+# folder in dev (order-list-db-1) and /srv/parts on the droplet.
+CONTAINER="${PG_CONTAINER:-parts-db-1}"
 DB_USER="${PG_USER:-postgres}"
 DB_NAME="${PG_DATABASE:-postgres}"
 
@@ -29,10 +31,14 @@ docker exec -i "$CONTAINER" pg_dump -U "$DB_USER" -d "$DB_NAME" \
   | gzip -9 > "$target.partial"
 mv "$target.partial" "$target"
 
-# A dump that restores nothing is usually a few hundred bytes.
+# The hazard is a dump that got cut off part-way — a half-written file looks
+# fine until the day you need it. pg_dump writes a completion marker as its
+# last line, so checking for that catches truncation exactly, and unlike a size
+# floor it stays correct whether the database holds one order or a season's
+# worth. (A fresh deployment legitimately dumps only a few KB.)
 size=$(stat -c%s "$target")
-if [ "$size" -lt 10000 ]; then
-  echo "$(date -uIs) FAILED: $target is only ${size} bytes" >&2
+if ! gunzip -c "$target" | tail -5 | grep -q 'PostgreSQL database dump complete'; then
+  echo "$(date -uIs) FAILED: $target is truncated - no completion marker (${size} bytes)" >&2
   exit 1
 fi
 

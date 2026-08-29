@@ -28,27 +28,58 @@ bun run build
 
 ## Deployment
 
-Runs on a single **DigitalOcean droplet**, not Cloudflare Workers. Caddy is the
-only process bound to a public port; everything else listens on localhost:
+Runs on a single **DigitalOcean droplet** (Ubuntu 24.04, 1 vCPU / 2 GB), not
+Cloudflare Workers. Caddy is the only process bound to a public port;
+everything else listens on localhost:
 
 | | |
 | --- | --- |
 | Caddy | `:80`/`:443` — TLS and reverse proxy, config in `deploy/Caddyfile` |
 | Nuxt | `127.0.0.1:3000` — `.output/server/index.mjs` under PM2 |
 | vendord | `127.0.0.1:3434` — the scraper, under PM2 |
-| Postgres | `127.0.0.1:5432` — `docker compose up -d` |
+| Postgres | `127.0.0.1:5433` — `docker compose up -d`, container `parts-db-1` |
 
-`ecosystem.config.cjs` defines both PM2 processes. **Build off the droplet** —
-in CI or locally — and ship `.output/`: a Nuxt build wants more memory than a
-2 GB box has spare, and an OOM mid-build takes the running site with it.
+`deploy/provision.sh` builds the box from scratch and is safe to re-run;
+`deploy/release.sh` ships a release. The app runs as the unprivileged `parts`
+user out of `/srv/parts`, not as root.
+
+**Build off the droplet** — in CI or locally — and ship `.output/`: a Nuxt build
+wants more memory than a 2 GB box has spare, and an OOM mid-build takes the
+running site with it. `bun install` is nearly as hungry: run it with nothing
+else competing, and expect the box to be unresponsive for a minute if it
+starts swapping. It answers ICMP throughout, so "ping works but SSH hangs"
+is memory pressure, not the network.
+
+Two things about that box that are easy to get wrong:
+
+- **PM2 does not read `.env`.** Nitro only loads it in dev, and PM2 has no
+  `env_file` option, so a process started without help comes up with no
+  `DATABASE_URL` and fails on its first query. `ecosystem.config.cjs` parses
+  the file itself and passes it to both processes — vendord included, whose
+  routes import the app's own `server/utils/db`.
+- **Docker publishes ports around ufw.** It writes its own iptables rules
+  ahead of ufw's chain, so a bare `"5433:5432"` puts Postgres on the public
+  internet while `ufw status` still reports the port as denied. The compose
+  file pins the published address to `127.0.0.1` deliberately.
 
 Shipping a release:
 
 ```bash
 bun run build                       # locally or in CI
-rsync -a .output/ droplet:/srv/parts/.output/
-ssh droplet 'cd /srv/parts && bun run db:migrate && pm2 reload innovators-parts'
+cd vendord && bunx nitro build      # and the scraper
+./deploy/release.sh                 # upload, install, migrate, reload
 ```
+
+The droplet needs a **full** `bun install`, not `--production`: `.output` does
+not vendor its dependencies (`better-sqlite3` is resolved from `node_modules`
+at runtime, and `/docs` breaks without it), and `drizzle-kit` — which
+`db:migrate` needs — is a devDependency.
+
+**Never ship `.output/server/node_modules`.** Nitro traces a dependency copy in
+there for whatever machine ran the build; from a Windows workstation its nested
+directories arrive empty and the app crash-loops on `ENOENT reading
+.../html-to-text/node_modules/htmlparser2`. `release.sh` excludes it so
+resolution walks up into the natively-installed `node_modules` instead.
 
 Migrations run **before** the reload, for the reason in the migrations note
 above. Backups are `deploy/backup-db.sh` on a nightly cron, plus weekly droplet

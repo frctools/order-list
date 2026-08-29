@@ -6,9 +6,37 @@
 //   pm2 start ecosystem.config.cjs
 //   pm2 save && pm2 startup     (so they come back after a reboot)
 
+const fs = require('node:fs')
 const path = require('node:path')
 
 const root = __dirname
+
+// Nitro only reads .env in dev, and PM2 has no env_file option, so a
+// production process started from here would otherwise come up with no
+// DATABASE_URL and fail on its first query. Parse the file ourselves rather
+// than adding a dotenv dependency just for this.
+function readEnvFile(file) {
+  if (!fs.existsSync(file)) return {}
+  const out = {}
+  for (const raw of fs.readFileSync(file, 'utf8').split('\n')) {
+    const line = raw.trim()
+    if (!line || line.startsWith('#')) continue
+    const eq = line.indexOf('=')
+    if (eq === -1) continue
+    const key = line.slice(0, eq).trim()
+    let value = line.slice(eq + 1).trim()
+    // Strip one layer of matching quotes, so quoted secrets don't arrive
+    // with the quotes still attached.
+    if (value.length > 1 && ((value.startsWith('"') && value.endsWith('"'))
+      || (value.startsWith("'") && value.endsWith("'")))) {
+      value = value.slice(1, -1)
+    }
+    out[key] = value
+  }
+  return out
+}
+
+const fileEnv = readEnvFile(path.join(root, '.env'))
 
 module.exports = {
   apps: [
@@ -16,8 +44,10 @@ module.exports = {
       name: 'innovators-parts',
       script: path.join(root, '.output/server/index.mjs'),
       interpreter: 'bun',
+      cwd: root,
       // Nuxt's node-server build reads its own config from the environment.
       env: {
+        ...fileEnv,
         NODE_ENV: 'production',
         HOST: '127.0.0.1',
         PORT: '3000'
@@ -32,10 +62,15 @@ module.exports = {
     },
     {
       // The scraper the app delegates blocked vendors to. Not exposed.
+      //
+      // Its routes import the app's own db/schema modules, so it needs the
+      // same DATABASE_URL the app uses — not just a host and port.
       name: 'vendord',
       script: path.join(root, 'vendord/.output/server/index.mjs'),
       interpreter: 'bun',
+      cwd: root,
       env: {
+        ...fileEnv,
         NODE_ENV: 'production',
         HOST: '127.0.0.1',
         PORT: '3434'
