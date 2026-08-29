@@ -111,11 +111,19 @@ Dev config lives in `.env` (gitignored). Most server code reads `process.env.*` 
 - `RESEND_KEY` — transactional email; optional in dev (only used when sending invites/notifications)
 - `MEILISEARCH_HOST`, `MEILISEARCH_API_KEY`, `MEILISEARCH_INDEX` — product search; optional
 - `DIGIKEY_CLIENT_ID`, `DIGIKEY_CLIENT_SECRET`, `DIGIKEY_API_BASE` — DigiKey Product Information API v4 (developer.digikey.com); optional. Sandbox and production are separate apps with separate credentials, so `DIGIKEY_API_BASE` has to match the pair in use — `https://sandbox-api.digikey.com` or `https://api.digikey.com`. Unset means DigiKey parts fall back to the URL-derived name and SKU.
+- `SIGNUP_BOOTSTRAP_EMAIL` — optional; restricts the one-time first-account signup to a single address (see *Signups are invitation-only* below). Unset means the first person to reach an empty instance claims it.
 - `NUXT_PUBLIC_SENTRY_DSN` — optional
 
 ## Architecture
 
 **Environment-dual database connection** — `server/utils/db.ts` is the single DB entry point (`useDB()`). In production it uses the Cloudflare **Hyperdrive** binding (`process.env.HYPERDRIVE.connectionString`); locally it falls back to `process.env.DATABASE_URL`. Same drizzle `node-postgres` driver either way. Always go through `useDB()`.
+
+**Signups are invitation-only** — there is no open registration. `server/utils/signup-gate.ts` holds the rule and `auth.ts` enforces it in Better Auth's `databaseHooks.user.create.before`, which throws a `403 APIError`. It lives in the database hook rather than on the page or a route wrapper because Better Auth owns `/api/auth/**` — a check anywhere else is bypassed by posting to `sign-up/email` directly. An account can be created only when:
+
+- a **pending, unexpired invitation** exists for that email (compared case-insensitively — Better Auth lowercases invitation addresses but not necessarily signup ones), or
+- the instance has **no users at all**, the bootstrap window that lets the first owner in. That window is first-come on a public host, so `SIGNUP_BOOTSTRAP_EMAIL` narrows it to one address; it closes permanently once any user exists.
+
+Note that Better Auth's `acceptInvitation` refuses unless the session's email matches the invitation exactly, so an invited signup must use the invited address — `/api/signup-status` exists to tell the signup page which of its three states to render (`bootstrap` / `invitation` / `closed`) and hands back the invited address so the form can pin it. That endpoint is cosmetic; forging its answer gains nothing because the hook still runs. Deliberately *not* used: `emailAndPassword.disableSignUp`, which would also lock out invited users and break the invite flow entirely.
 
 **Multi-tenancy via Better Auth organizations** — `server/utils/auth.ts` configures Better Auth with the `organization` plugin. Every app resource is scoped to an organization. The gate for authenticated API routes is `requireOrganizationContext(event)` in `server/utils/session.ts`: it returns `{ user, session, organizationId, membership }`, throwing **401** if unauthenticated and **400** if no active org is selected (`session.activeOrganizationId`). It resolves `membership` through a `getFullOrganization` call, so it costs an extra auth round-trip per request. New API handlers that touch org data should call it first and filter queries by `organizationId`.
 

@@ -6,6 +6,8 @@ import { Resend } from "resend";
 // @ts-expect-error Vue-Email SFC has no type declaration in the server project
 import InviteEmail from "./InviteEmail.vue";
 import { render } from "@vue-email/render";
+import { APIError } from "better-auth/api";
+import { isSignUpAllowed, SIGNUP_CLOSED_MESSAGE } from "./signup-gate";
 import * as schema from "./auth-schema";
 import { EMAIL_FROM_INVITES, SITE_URL } from "./site";
 
@@ -55,6 +57,21 @@ export const useAuth = () =>
     ],
     emailAndPassword: {
       enabled: true,
+    },
+    // Signups are closed: only an invited address (or the very first account on
+    // a fresh instance) may create a user. Enforced here rather than on the
+    // signup page because Better Auth owns the route the form posts to.
+    databaseHooks: {
+      user: {
+        create: {
+          before: async (newUser) => {
+            if (await isSignUpAllowed(newUser.email)) return;
+            throw new APIError("FORBIDDEN", {
+              message: SIGNUP_CLOSED_MESSAGE,
+            });
+          },
+        },
+      },
     },
     session: {
     },

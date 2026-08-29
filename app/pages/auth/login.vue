@@ -8,11 +8,8 @@
       @submit="onSubmit"
     >
       <template #description>
-        Don't have an account?
-        <ULink
-          to="/auth/signup"
-          class="text-primary font-medium"
-        >Sign up</ULink>.
+        Accounts are by invitation. Ask a team admin to invite you, then create
+        your account from the link in that email.
       </template>
     </UAuthForm>
   </div>
