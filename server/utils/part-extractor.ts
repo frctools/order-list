@@ -4,6 +4,7 @@ import { parseHTML } from 'linkedom'
 // and pull structured details. Tries, in order:
 //   1. Shopify  — /products/{handle}.json (most FRC vendors run Shopify)
 //   2. JSON-LD  — schema.org/Product in <script type="application/ld+json">
+//   2.5 Amazon  — its meta tags describe the storefront, so read the DOM
 //   3. OpenGraph/meta — og:*, product:price:*, itemprop fallbacks
 // No external scraper service or database required.
 
@@ -32,7 +33,14 @@ export interface ExtractionResult {
   url: string
   hostname: string
   vendorName: string
-  source: 'shopify' | 'json-ld' | 'opengraph' | 'none'
+  source:
+    | 'shopify'
+    | 'amazon'
+    | 'json-ld'
+    | 'opengraph'
+    | 'scraper'
+    | 'url'
+    | 'none'
   product: ExtractedProduct | null
 }
 
@@ -48,8 +56,16 @@ const FRC_VENDORS: Array<{ match: string, name: string }> = [
   { match: 'andymark.com', name: 'AndyMark' },
   { match: 'vexrobotics.com', name: 'VEX Robotics' },
   { match: 'vexpro.com', name: 'VEXpro' },
-  { match: 'ctr-electronics.com', name: 'Cross the Road Electronics' }
+  { match: 'ctr-electronics.com', name: 'Cross the Road Electronics' },
+  { match: 'onlinemetals.com', name: 'Online Metals' },
+  { match: 'mcmaster.com', name: 'McMaster-Carr' }
 ]
+
+// Match a hostname against a bare domain, tolerating www./store. subdomains.
+export function hostMatches(hostname: string, domain: string): boolean {
+  const h = hostname.toLowerCase().replace(/^www\./, '')
+  return h === domain || h.endsWith(`.${domain}`)
+}
 
 // Shopify's `product.vendor` holds the brand/manufacturer, not the store you
 // order from, and is often left as the "My Store" default. Ignore that value.
@@ -60,11 +76,16 @@ const USER_AGENT
   + '(KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36'
 
 function friendlyVendorName(hostname: string): string | null {
-  const h = hostname.toLowerCase().replace(/^www\./, '')
   for (const v of FRC_VENDORS) {
-    if (h === v.match || h.endsWith(`.${v.match}`)) return v.name
+    if (hostMatches(hostname, v.match)) return v.name
   }
   return null
+}
+
+// The name to show for a host: the curated one when we have it, else a
+// readable form of the domain.
+export function vendorDisplayName(hostname: string): string {
+  return friendlyVendorName(hostname) ?? titleCaseHost(hostname)
 }
 
 function titleCaseHost(hostname: string): string {
@@ -301,6 +322,172 @@ function getMeta(document: ParsedDoc, selectors: string[]): string | null {
   return null
 }
 
+// ---- URL-only vendors ----------------------------------------------------
+
+// Some vendors' product pages can't be read by a server at all — the details
+// arrive via client-side rendering, or the site refuses automated requests.
+// Their URLs still identify the part, and parsing one costs no request, so
+// these hosts skip the network entirely.
+
+// Online Metals sits behind a bot challenge, so a server fetch of the product
+// page comes back as an interstitial rather than the listing — none of the
+// three strategies above can see anything. Their URLs carry enough on their
+// own to be worth filling in:
+//   /en/buy/{category}/{slug}/pid/{pid}          the product
+//   ?variant={pid}_{lengthInInches}_{n}          a specific cut length
+const ONLINE_METALS_PRODUCT = /\/buy\/[^/]+\/([^/]+)\/pid\/(\d+)/i
+
+function titleFromSlug(slug: string): string {
+  return slug
+    .split('-')
+    .filter(Boolean)
+    .join(' ')
+    // Leading dimensions are written as "0-625" for 0.625". Only a leading
+    // zero is unambiguous — "1-2" is a fraction (1/2"), so leave it alone.
+    .replace(/\b0 (\d+)/g, '0.$1')
+    .replace(/\b\w/g, character => character.toUpperCase())
+}
+
+function fromOnlineMetalsUrl(urlObj: URL): ExtractedProduct | null {
+  const match = ONLINE_METALS_PRODUCT.exec(urlObj.pathname)
+  if (!match) return null
+  const [, slug, productId] = match
+
+  // The cut length is what actually gets ordered, so prefer its sku over the
+  // bare product id when the link names one.
+  const variant = urlObj.searchParams.get('variant')
+  const isVariantOfProduct = !!variant && variant.startsWith(`${productId}_`)
+  const lengthInches = isVariantOfProduct ? variant.split('_')[1] : null
+
+  return {
+    title: titleFromSlug(slug!),
+    description: null,
+    // Price is per cut length and only lives on the page we can't read.
+    price: null,
+    currency: 'USD',
+    sku: isVariantOfProduct ? variant : productId!,
+    variantId: isVariantOfProduct ? variant : null,
+    variantTitle: lengthInches ? `${lengthInches}" length` : null,
+    variants: []
+  }
+}
+
+// McMaster-Carr renders product pages entirely client-side, marks them
+// `noindex, noarchive`, and disallows the endpoints that serve the data in
+// robots.txt — a fetch returns a shell whose only title is "McMaster-Carr",
+// which would be worse than nothing. We never request their pages.
+//
+// The part number is the whole identifier and it's right in the path:
+//   /91290A115/                          the part
+//   /91290A115-alloy-steel-screws/       same, with an SEO slug
+const MCMASTER_PART = /^\/(\d{3,6}[A-Z]\d{1,5})(?:-([a-z0-9-]+))?\/?$/i
+
+function fromMcMasterUrl(urlObj: URL): ExtractedProduct | null {
+  const match = MCMASTER_PART.exec(urlObj.pathname)
+  if (!match) return null
+  const [, partNumber, slug] = match
+
+  return {
+    // Without the page there's no description; the part number is a name a
+    // team will recognise, and they can rename it.
+    title: slug ? titleFromSlug(slug) : partNumber!.toUpperCase(),
+    description: null,
+    price: null,
+    currency: 'USD',
+    sku: partNumber!.toUpperCase(),
+    variantId: null,
+    variantTitle: null,
+    variants: []
+  }
+}
+
+const URL_ONLY_VENDORS: Array<{
+  domain: string
+  parse: (urlObj: URL) => ExtractedProduct | null
+}> = [
+  { domain: 'onlinemetals.com', parse: fromOnlineMetalsUrl },
+  { domain: 'mcmaster.com', parse: fromMcMasterUrl }
+]
+
+// ---- Amazon --------------------------------------------------------------
+
+// Amazon's meta tags describe the storefront, not the product: <meta
+// name="title"> reads "Amazon.com: {name} : {category}" and there's no price
+// tag at all. The real title and price are in the DOM, so read those instead
+// of letting the generic OpenGraph fallback pick up the wrapped version.
+
+export function isAmazonHost(hostname: string): boolean {
+  return /(^|\.)amazon\.[a-z]{2,3}(\.[a-z]{2})?$/i.test(hostname)
+}
+
+// Peel the storefront prefix and trailing category breadcrumb off a title.
+// Only used when the page didn't give us the clean #productTitle.
+export function cleanAmazonTitle(title: string): string {
+  const withoutStore = title.replace(/^\s*amazon[^:]*:\s*/i, '')
+  // "{name} : {category}" — product names use ", " or ": ", rarely " : ".
+  const breadcrumb = withoutStore.lastIndexOf(' : ')
+  const name = breadcrumb > 0 ? withoutStore.slice(0, breadcrumb) : withoutStore
+  return name.trim()
+}
+
+// The ASIN is Amazon's part number, and it's in the URL.
+const AMAZON_ASIN = /\/(?:dp|gp\/product|gp\/aw\/d)\/([A-Z0-9]{10})(?:[/?]|$)/i
+
+function amazonAsin(urlObj: URL): string | null {
+  return AMAZON_ASIN.exec(urlObj.pathname)?.[1]?.toUpperCase() ?? null
+}
+
+// The ASIN out of a product link, for callers holding a URL string.
+export function amazonAsinFromUrl(url: string): string | null {
+  try {
+    return amazonAsin(new URL(url))
+  } catch {
+    return null
+  }
+}
+
+function tryAmazon(
+  document: ParsedDoc,
+  urlObj: URL
+): ExtractedProduct | null {
+  const rawTitle = getMeta(document, [
+    '#productTitle',
+    'meta[property="og:title"]',
+    'meta[name="title"]'
+  ])
+  if (!rawTitle) return null
+  const title = cleanAmazonTitle(rawTitle)
+  if (!title) return null
+
+  const price = parsePrice(
+    getMeta(document, [
+      '#corePrice_feature_div .a-offscreen',
+      '#corePriceDisplay_desktop_feature_div .a-offscreen',
+      '#apex_desktop .a-offscreen',
+      '.a-price .a-offscreen',
+      '#priceblock_ourprice',
+      '#priceblock_dealprice'
+    ])
+  )
+
+  // The meta description repeats the wrapped title; the bullet list is the
+  // only place with anything worth putting in Notes.
+  const bullets = cleanText(
+    getMeta(document, ['#feature-bullets'])?.replace(/^\s*About this item\s*/i, '')
+  )
+
+  return {
+    title,
+    description: bullets,
+    price,
+    currency: 'USD',
+    sku: amazonAsin(urlObj),
+    variantId: null,
+    variantTitle: null,
+    variants: []
+  }
+}
+
 // ---- Orchestration -------------------------------------------------------
 
 export async function extractPart(
@@ -310,6 +497,22 @@ export async function extractPart(
   const urlObj = new URL(url)
   const hostname = urlObj.hostname
   const mappedVendor = friendlyVendorName(hostname)
+  const vendorName = mappedVendor ?? titleCaseHost(hostname)
+
+  // 0. Vendors whose pages a server can't read. Fetching them either fails or
+  // returns a shell we'd misread as real details, so the URL is the only
+  // source — and checking it costs no request.
+  const urlOnly = URL_ONLY_VENDORS.find(v => hostMatches(hostname, v.domain))
+  if (urlOnly) {
+    const product = urlOnly.parse(urlObj)
+    return {
+      url,
+      hostname,
+      vendorName,
+      source: product ? 'url' : 'none',
+      product
+    }
+  }
 
   // 1. Shopify JSON — richest data, so try it first for any /products/ URL.
   const shopify = await tryShopify(urlObj, signal)
@@ -385,6 +588,21 @@ export async function extractPart(
           variantId: null,
           variantTitle: null,
           variants: []
+        }
+      }
+    }
+
+    // 2.5 Amazon: read the DOM before the meta tags, which would otherwise
+    // hand us a storefront-wrapped title and no price.
+    if (isAmazonHost(hostname)) {
+      const product = tryAmazon(document, urlObj)
+      if (product) {
+        return {
+          url,
+          hostname,
+          vendorName: mappedVendor ?? titleCaseHost(hostname),
+          source: 'amazon',
+          product
         }
       }
     }

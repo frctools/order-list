@@ -36,16 +36,20 @@ function resolveHost(order: Order): string | null {
   return hosts.size === 1 ? [...hosts][0]! : null
 }
 
-function looksLikeShopify(order: Order): boolean {
-  if (order.vendorType) return order.vendorType === 'shopify'
+// Mirrors detectPlatform() on the server; see the note above about this being
+// deliberately optimistic.
+function hasSupportedPlatform(order: Order, host: string): boolean {
+  if (/(^|\.)amazon\.[a-z]{2,3}(\.[a-z]{2})?$/i.test(host)) return true
+  if (order.vendorType) return order.vendorType !== 'bigcommerce'
   return order.items.some(item => /\/products\//.test(item.externalUrl ?? ''))
 }
 
 export function canBuildVendorCart(order: Order): boolean {
   if (order.items.length === 0) return false
-  if (!resolveHost(order)) return false
-  if (!looksLikeShopify(order)) return false
-  // Something has to identify the part on the vendor's side: either a variant
-  // id we can use outright, or a link the server can resolve a SKU against.
+  const host = resolveHost(order)
+  if (!host) return false
+  if (!hasSupportedPlatform(order, host)) return false
+  // Something has to identify the part on the vendor's side: either an id we
+  // can use outright, or a link the server can resolve it from.
   return order.items.some(item => item.variantId || item.externalUrl)
 }
