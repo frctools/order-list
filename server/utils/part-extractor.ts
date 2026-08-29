@@ -4,6 +4,7 @@ import { parseHTML } from 'linkedom'
 // and pull structured details. Tries, in order:
 //   1. Shopify  — /products/{handle}.json (most FRC vendors run Shopify)
 //   2. JSON-LD  — schema.org/Product in <script type="application/ld+json">
+//   2.5 Amazon  — its meta tags describe the storefront, so read the DOM
 //   3. OpenGraph/meta — og:*, product:price:*, itemprop fallbacks
 // No external scraper service or database required.
 
@@ -32,7 +33,14 @@ export interface ExtractionResult {
   url: string
   hostname: string
   vendorName: string
-  source: 'shopify' | 'json-ld' | 'opengraph' | 'scraper' | 'url' | 'none'
+  source:
+    | 'shopify'
+    | 'amazon'
+    | 'json-ld'
+    | 'opengraph'
+    | 'scraper'
+    | 'url'
+    | 'none'
   product: ExtractedProduct | null
 }
 
@@ -401,6 +409,76 @@ const URL_ONLY_VENDORS: Array<{
   { domain: 'mcmaster.com', parse: fromMcMasterUrl }
 ]
 
+// ---- Amazon --------------------------------------------------------------
+
+// Amazon's meta tags describe the storefront, not the product: <meta
+// name="title"> reads "Amazon.com: {name} : {category}" and there's no price
+// tag at all. The real title and price are in the DOM, so read those instead
+// of letting the generic OpenGraph fallback pick up the wrapped version.
+
+function isAmazonHost(hostname: string): boolean {
+  return /(^|\.)amazon\.[a-z]{2,3}(\.[a-z]{2})?$/i.test(hostname)
+}
+
+// Peel the storefront prefix and trailing category breadcrumb off a title.
+// Only used when the page didn't give us the clean #productTitle.
+export function cleanAmazonTitle(title: string): string {
+  const withoutStore = title.replace(/^\s*amazon[^:]*:\s*/i, '')
+  // "{name} : {category}" — product names use ", " or ": ", rarely " : ".
+  const breadcrumb = withoutStore.lastIndexOf(' : ')
+  const name = breadcrumb > 0 ? withoutStore.slice(0, breadcrumb) : withoutStore
+  return name.trim()
+}
+
+// The ASIN is Amazon's part number, and it's in the URL.
+const AMAZON_ASIN = /\/(?:dp|gp\/product|gp\/aw\/d)\/([A-Z0-9]{10})(?:[/?]|$)/i
+
+function amazonAsin(urlObj: URL): string | null {
+  return AMAZON_ASIN.exec(urlObj.pathname)?.[1]?.toUpperCase() ?? null
+}
+
+function tryAmazon(
+  document: ParsedDoc,
+  urlObj: URL
+): ExtractedProduct | null {
+  const rawTitle = getMeta(document, [
+    '#productTitle',
+    'meta[property="og:title"]',
+    'meta[name="title"]'
+  ])
+  if (!rawTitle) return null
+  const title = cleanAmazonTitle(rawTitle)
+  if (!title) return null
+
+  const price = parsePrice(
+    getMeta(document, [
+      '#corePrice_feature_div .a-offscreen',
+      '#corePriceDisplay_desktop_feature_div .a-offscreen',
+      '#apex_desktop .a-offscreen',
+      '.a-price .a-offscreen',
+      '#priceblock_ourprice',
+      '#priceblock_dealprice'
+    ])
+  )
+
+  // The meta description repeats the wrapped title; the bullet list is the
+  // only place with anything worth putting in Notes.
+  const bullets = cleanText(
+    getMeta(document, ['#feature-bullets'])?.replace(/^\s*About this item\s*/i, '')
+  )
+
+  return {
+    title,
+    description: bullets,
+    price,
+    currency: 'USD',
+    sku: amazonAsin(urlObj),
+    variantId: null,
+    variantTitle: null,
+    variants: []
+  }
+}
+
 // ---- Orchestration -------------------------------------------------------
 
 export async function extractPart(
@@ -501,6 +579,21 @@ export async function extractPart(
           variantId: null,
           variantTitle: null,
           variants: []
+        }
+      }
+    }
+
+    // 2.5 Amazon: read the DOM before the meta tags, which would otherwise
+    // hand us a storefront-wrapped title and no price.
+    if (isAmazonHost(hostname)) {
+      const product = tryAmazon(document, urlObj)
+      if (product) {
+        return {
+          url,
+          hostname,
+          vendorName: mappedVendor ?? titleCaseHost(hostname),
+          source: 'amazon',
+          product
         }
       }
     }

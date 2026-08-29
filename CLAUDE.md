@@ -73,7 +73,7 @@ Totals are derived in JS rather than stored: `totalCents` (items), `paidCents` (
 **Vendors & product search** — three distinct systems:
 - `server/api/vendors/search.get.ts` queries **Meilisearch** with hybrid (keyword + semantic) search over the product catalog.
 - `server/api/vendors/index.get.ts` proxies to the external `vendord` scraper service — in production through the Cloudflare **VPC_SERVICE** Fetcher binding, in dev to `http://localhost:3001`. Vendors carry a `type` (`shopify`/`bigcommerce`/`amazon`) and `config`; fetched products are cached in the `productCache` table.
-- `server/api/vendors/extract.get.ts` + `server/utils/part-extractor.ts` is a **self-contained in-Worker extractor** that needs no scraper service or DB: given a product URL it tries Shopify's `/products/{handle}.json`, then JSON-LD, then OpenGraph/meta. It is auth-gated and refuses loopback/private/link-local hosts so it can't be used as an SSRF proxy.
+- `server/api/vendors/extract.get.ts` + `server/utils/part-extractor.ts` is a **self-contained in-Worker extractor** that needs no scraper service or DB: given a product URL it tries Shopify's `/products/{handle}.json`, then JSON-LD, then an Amazon-specific DOM read (their meta tags describe the storefront — `<meta name="title">` is `"Amazon.com: {name} : {category}"` and there's no price tag at all), then OpenGraph/meta. It is auth-gated and refuses loopback/private/link-local hosts so it can't be used as an SSRF proxy.
 
 Two escape hatches exist for vendors the extractor can't read directly:
 
