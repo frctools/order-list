@@ -5,7 +5,6 @@ export default defineNuxtConfig({
     "@nuxt/eslint",
     "@nuxt/ui",
     "@nuxt/content",
-    "@nuxtjs/plausible",
     "@nuxtjs/mdc",
     "@sentry/nuxt/module",
   ],
@@ -98,12 +97,6 @@ export default defineNuxtConfig({
 
   icon: {
     provider: "iconify",
-  },
-
-  plausible: {
-    // Prevent tracking on localhost
-    ignoredHostnames: ["localhost"],
-    apiHost: "https://possible.grahamsh.com",
   },
 
   sentry: {
