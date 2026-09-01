@@ -49,6 +49,21 @@
               Looking up part information...
             </div>
 
+            <div
+              v-if="isUrlDerived"
+              class="flex min-w-0 items-start gap-2 rounded-lg border border-warning-300/70 bg-warning-50/50 p-3 text-xs dark:border-warning-800/70 dark:bg-warning-950/30"
+            >
+              <UIcon
+                name="i-lucide-alert-triangle"
+                class="mt-0.5 size-4 shrink-0 text-warning-600 dark:text-warning-400"
+              />
+              <p class="min-w-0 text-gray-600 dark:text-gray-300">
+                This vendor blocks automated lookups, so the name is guessed
+                from the link and there is no price. Check the name and fill
+                in the price from the product page.
+              </p>
+            </div>
+
             <UFormField
               name="partName"
               label="Part name"
@@ -328,6 +343,13 @@ const skipNextVendorLookup = ref(false)
 
 const variantOptions = ref<VariantOption[]>([])
 
+// Some vendors refuse server-side lookups outright (Studica sits behind a
+// Cloudflare managed challenge; McMaster's pages render client-side), so all
+// the extractor has to go on is the URL. The name it derives from a slug is
+// a guess and there is no price at all -- say so, rather than letting a
+// filled-in name read as a successful lookup.
+const isUrlDerived = ref(false)
+
 // Quantity discount tiers from the vendor (DigiKey publishes them). Held only
 // for the current lookup — prices move, so they're re-fetched rather than
 // stored on the item.
@@ -424,6 +446,7 @@ watchEffect((onCleanup) => {
   if (!externalUrl) {
     variantOptions.value = []
     priceBreaks.value = []
+    isUrlDerived.value = false
     isLookingUpVendor.value = false
     return
   }
@@ -496,8 +519,11 @@ async function applyExtractedProduct(data: ExtractionResponse) {
   const product = data.product
   if (!product) {
     variantOptions.value = []
+    isUrlDerived.value = false
     return
   }
+
+  isUrlDerived.value = data.source === 'url' && product.price == null
 
   if (data.vendorName) {
     formState.vendorId = data.vendorName
@@ -553,6 +579,7 @@ async function applyExtractedProduct(data: ExtractionResponse) {
 
 async function applyScraperProduct(data: VendorProductResponse) {
   formState.vendorId = data.vendor.id
+  isUrlDerived.value = false
 
   const product = data.productData?.product
   if (!product) {
@@ -620,6 +647,7 @@ function initializeFormState() {
   }
   variantOptions.value = []
   priceBreaks.value = []
+  isUrlDerived.value = false
 }
 
 function resetFormState() {
