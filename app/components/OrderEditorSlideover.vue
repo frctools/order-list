@@ -49,9 +49,14 @@
               Looking up part information...
             </div>
 
+            <!-- min-w-0 is load-bearing: the choice titles are `truncate`, so
+                 white-space:nowrap makes their max-content width the full
+                 untruncated spec. A grid item defaults to min-width:auto and
+                 so cannot shrink below that, which widens the form's column
+                 and pushes every other field out past the slideover. -->
             <div
               v-if="optionGroups.length > 0"
-              class="rounded-lg border border-primary-300/70 bg-primary-50/50 p-3 dark:border-primary-800/70 dark:bg-primary-950/30"
+              class="min-w-0 rounded-lg border border-primary-300/70 bg-primary-50/50 p-3 dark:border-primary-800/70 dark:bg-primary-950/30"
             >
               <div class="flex items-start gap-2">
                 <UIcon
