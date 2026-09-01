@@ -122,6 +122,21 @@ export function clearAllowListCache(): void {
   allowList = null
 }
 
+// linkedom ships loose DOM types and the server tsconfig omits the DOM lib,
+// so describe just the surface used here and cast the parsed document onto
+// it. Mirrors the ParsedEl/ParsedDoc pair in part-extractor.ts, with the
+// nested queries this parser needs on elements as well as the document.
+interface ParsedEl {
+  getAttribute(name: string): string | null
+  textContent: string | null
+  querySelector(selector: string): ParsedEl | null
+  querySelectorAll(selector: string): Iterable<ParsedEl>
+}
+
+function parseDocument(html: string): ParsedEl {
+  return (parseHTML(html) as unknown as { document: ParsedEl }).document
+}
+
 function parsePrice(value: string | null): number | null {
   if (!value) return null
   const numeric = Number(value)
@@ -141,7 +156,7 @@ function parsePrice(value: string | null): number | null {
  * native interaction, which is why the caller can add them in bulk.
  */
 export function parseOptionGroups(html: string): DpoOptionGroup[] {
-  const { document } = parseHTML(html)
+  const document = parseDocument(html)
   const groups: DpoOptionGroup[] = []
 
   for (const field of Array.from(
