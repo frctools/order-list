@@ -1,4 +1,5 @@
 import { parseHTML } from 'linkedom'
+import type { DpoOptionGroup } from './wcp-dpo'
 
 // Self-contained product extractor: given a product URL, reach out to the site
 // and pull structured details. Tries, in order:
@@ -27,6 +28,10 @@ export interface ExtractedProduct {
   price: number | null
   currency: string | null
   sku: string | null
+  // The platform's *product* id, distinct from the variant id below. Only the
+  // Shopify path sets it, and only because WCP's configurator lookup is keyed
+  // by product rather than variant.
+  productId?: string | null
   // The platform id of the variant these details describe. `variants` is left
   // empty when there's no real choice to make, so this is the only way to
   // recover the id of a single-variant product (a cart link needs it).
@@ -53,6 +58,10 @@ export interface ExtractionResult {
     | 'url'
     | 'none'
   product: ExtractedProduct | null
+  // Set when the page is a configurator rather than a single orderable part:
+  // the real parts it offers, each a standalone product in its own right.
+  // See server/utils/wcp-dpo.ts.
+  optionGroups?: DpoOptionGroup[]
 }
 
 // Common FRC vendors -> canonical display name. Matched by hostname suffix so
@@ -251,6 +260,7 @@ async function tryShopify(
     product: {
       title,
       description: cleanText(product.body_html),
+      productId: asString(product.id),
       price: selected?.price ?? null,
       currency: 'USD',
       sku: selected?.sku ?? null,
