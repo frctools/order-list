@@ -49,6 +49,87 @@
               Looking up part information...
             </div>
 
+            <!-- min-w-0 is load-bearing: the choice titles are `truncate`, so
+                 white-space:nowrap makes their max-content width the full
+                 untruncated spec. A grid item defaults to min-width:auto and
+                 so cannot shrink below that, which widens the form's column
+                 and pushes every other field out past the slideover. -->
+            <div
+              v-if="optionGroups.length > 0"
+              class="min-w-0 rounded-lg border border-primary-300/70 bg-primary-50/50 p-3 dark:border-primary-800/70 dark:bg-primary-950/30"
+            >
+              <div class="flex items-start gap-2">
+                <UIcon
+                  name="i-lucide-list-tree"
+                  class="mt-0.5 size-4 shrink-0 text-primary-600 dark:text-primary-400"
+                />
+                <div class="min-w-0">
+                  <p class="text-sm font-medium text-gray-900 dark:text-white">
+                    Pick the exact part
+                  </p>
+                  <p class="text-xs text-gray-500">
+                    This link is a configurator page listing
+                    {{ optionChoiceCount }} parts, not a single orderable
+                    item.
+                  </p>
+                </div>
+              </div>
+
+              <UInput
+                v-model="optionFilter"
+                placeholder="Filter by spec or part number"
+                icon="i-lucide-search"
+                size="sm"
+                class="mt-3 w-full"
+              />
+
+              <div class="mt-2 max-h-72 space-y-3 overflow-y-auto overflow-x-hidden">
+                <div
+                  v-for="group in filteredOptionGroups"
+                  :key="group.id"
+                >
+                  <p
+                    class="sticky top-0 bg-primary-50/90 py-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:bg-primary-950/90"
+                  >
+                    {{ group.label }}
+                  </p>
+                  <ul class="space-y-0.5">
+                    <li
+                      v-for="choice in group.choices"
+                      :key="choice.sku"
+                    >
+                      <button
+                        type="button"
+                        class="w-full rounded-md px-2 py-1.5 text-left hover:bg-primary-100/70 dark:hover:bg-primary-900/40"
+                        @click="selectOptionChoice(choice)"
+                      >
+                        <span
+                          class="block truncate text-sm text-gray-900 dark:text-gray-100"
+                        >
+                          {{ choice.title }}
+                        </span>
+                        <span class="mt-0.5 block text-xs text-gray-500">
+                          <span class="font-mono">{{ choice.sku }}</span>
+                          <template v-if="choice.price != null">
+                            &middot;
+                            {{
+                              formatVariantPriceLabel(String(choice.price))
+                            }}
+                          </template>
+                        </span>
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+                <p
+                  v-if="filteredOptionGroups.length === 0"
+                  class="py-3 text-center text-sm text-gray-500"
+                >
+                  No parts match &ldquo;{{ optionFilter }}&rdquo;.
+                </p>
+              </div>
+            </div>
+
             <UFormField
               name="partName"
               label="Part name"
@@ -328,6 +409,45 @@ const skipNextVendorLookup = ref(false)
 
 const variantOptions = ref<VariantOption[]>([])
 
+// WCP's configurator pages (Itoris DPO) answer with the parts they actually
+// sell rather than with one orderable product. Held for the current lookup
+// only: picking a part switches the form to that part's own product page.
+const optionGroups = ref<DpoOptionGroup[]>([])
+const optionFilter = ref('')
+
+const optionChoiceCount = computed(() =>
+  optionGroups.value.reduce((sum, group) => sum + group.choices.length, 0)
+)
+
+// Match on the spec and the part number both, and drop any group the filter
+// empties — forty parts across five groups is more than anyone wants to
+// scroll to find a 1/2" bore.
+const filteredOptionGroups = computed(() => {
+  const query = optionFilter.value.trim().toLowerCase()
+  if (!query) return optionGroups.value
+  return optionGroups.value
+    .map(group => ({
+      ...group,
+      choices: group.choices.filter(choice =>
+        `${choice.title} ${choice.sku}`.toLowerCase().includes(query)
+      )
+    }))
+    .filter(group => group.choices.length > 0)
+})
+
+function selectOptionChoice(choice: DpoChoice) {
+  formState.partName = choice.title
+  if (choice.price != null) formState.unitPrice = String(choice.price)
+  formState.variantId = choice.sku
+  formState.variantTitle = ''
+  optionFilter.value = ''
+  // Pointing the link at the part's own product page is the whole trick.
+  // Everything downstream then treats it as the ordinary Shopify product it
+  // is — this component's own lookup fills in the rest, and the vendor cart
+  // handoff resolves a variant from it later without knowing DPO exists.
+  formState.externalUrl = choice.productUrl
+}
+
 // Quantity discount tiers from the vendor (DigiKey publishes them). Held only
 // for the current lookup — prices move, so they're re-fetched rather than
 // stored on the item.
@@ -424,6 +544,7 @@ watchEffect((onCleanup) => {
   if (!externalUrl) {
     variantOptions.value = []
     priceBreaks.value = []
+    optionGroups.value = []
     isLookingUpVendor.value = false
     return
   }
@@ -496,11 +617,23 @@ async function applyExtractedProduct(data: ExtractionResponse) {
   const product = data.product
   if (!product) {
     variantOptions.value = []
+    optionGroups.value = []
     return
   }
 
   if (data.vendorName) {
     formState.vendorId = data.vendorName
+  }
+
+  // A configurator page describes a category, not a part: its title
+  // ("Imperial Bearings") and its "from" price would fill the form with
+  // something that looks right and cannot be ordered. Offer the parts it
+  // lists instead, and leave the fields alone until one is picked.
+  optionGroups.value = data.optionGroups ?? []
+  if (optionGroups.value.length > 0) {
+    variantOptions.value = []
+    priceBreaks.value = []
+    return
   }
 
   if (product.title) {
@@ -553,6 +686,7 @@ async function applyExtractedProduct(data: ExtractionResponse) {
 
 async function applyScraperProduct(data: VendorProductResponse) {
   formState.vendorId = data.vendor.id
+  optionGroups.value = []
 
   const product = data.productData?.product
   if (!product) {
@@ -620,6 +754,8 @@ function initializeFormState() {
   }
   variantOptions.value = []
   priceBreaks.value = []
+  optionGroups.value = []
+  optionFilter.value = ''
 }
 
 function resetFormState() {
@@ -683,6 +819,21 @@ interface VariantOption {
   price?: string | null
 }
 
+// One part offered by a configurator page. Mirrors DpoChoice /
+// DpoOptionGroup in server/utils/wcp-dpo.ts.
+interface DpoChoice {
+  sku: string
+  title: string
+  price: number | null
+  productUrl: string
+}
+
+interface DpoOptionGroup {
+  id: string
+  label: string
+  choices: DpoChoice[]
+}
+
 interface ExtractionResponse {
   vendorName: string
   source:
@@ -709,6 +860,7 @@ interface ExtractionResponse {
     }>
     priceBreaks?: Array<{ quantity: number, unitPrice: number }>
   } | null
+  optionGroups?: DpoOptionGroup[]
 }
 
 interface VendorProductResponse {
