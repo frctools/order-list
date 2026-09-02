@@ -6,6 +6,7 @@ import {
   shouldDelegateToScraper,
   toExtractionResult
 } from '../../utils/vendord'
+import { fetchOptionGroups, isWcpHost } from '../../utils/wcp-dpo'
 import { requireOrganizationContext } from '../../utils/session'
 
 // Reject URLs that point at the loopback/link-local/private ranges so this
@@ -84,7 +85,33 @@ export default defineEventHandler(async (event) => {
       if (mapped) return mapped
     }
 
-    return await extractPart(url, controller.signal)
+    const result = await extractPart(url, controller.signal)
+
+    // WCP's configurator pages are indistinguishable from ordinary products
+    // through Shopify's API — one "Default Title" variant, a real-looking
+    // "from" price — so reading one yields a category ("Imperial Bearings")
+    // that looks like a successful extraction. Ask DPO for the parts it
+    // actually offers.
+    //
+    // A genuine WCP part carries its own SKU, so only a SKU-less product is
+    // a candidate. That keeps the common case — a link straight to
+    // /products/wcp-2059 — at zero extra requests.
+    if (
+      result.source === 'shopify'
+      && isWcpHost(result.hostname)
+      && result.product
+      && !result.product.sku
+      && result.product.productId
+    ) {
+      const optionGroups = await fetchOptionGroups(
+        result.product.productId,
+        result.product.variantId,
+        controller.signal
+      )
+      if (optionGroups) return { ...result, optionGroups }
+    }
+
+    return result
   } catch {
     throw createError({
       statusCode: 502,
