@@ -26,6 +26,7 @@ source in the first place.
 - 🏷️ **Tags** — organize parts with custom tags and colors
 - 🔎 **Vendor lookup** — paste a product link and get name, price and part number
 - 🛒 **Cart handoff** — hand a whole order to the vendor's own cart in one click
+- 🧾 **Receipts** — attach invoices and packing slips to an order, kept with the order itself
 - 📥 **BOM import** — bring a Bill of Materials straight in from Onshape
 
 ## Development
@@ -43,6 +44,10 @@ bun run dev
 # Apply database migrations
 bun run db:migrate
 
+# Lint and typecheck (there is no test runner)
+bun run lint
+bun run typecheck
+
 # Build for production
 bun run build
 ```
@@ -52,11 +57,11 @@ migrations require, and the per-vendor quirks behind product lookup.
 
 ## Stack
 
-- [Nuxt 4](https://nuxt.com)
-- [Nuxt UI](https://ui.nuxt.com)
-- [Better Auth](https://www.better-auth.com)
-- [Drizzle ORM](https://orm.drizzle.team)
-- [Cloudflare Workers](https://workers.cloudflare.com)
+- [Nuxt 4](https://nuxt.com) and [Nuxt UI](https://ui.nuxt.com)
+- [Better Auth](https://www.better-auth.com) for accounts, organizations and invitations
+- [Drizzle ORM](https://orm.drizzle.team) on [PostgreSQL](https://www.postgresql.org)
+- [Meilisearch](https://www.meilisearch.com) for product search
+- Deployed to a DigitalOcean droplet — Node under PM2, behind [Caddy](https://caddyserver.com)
 
 ## License
 
