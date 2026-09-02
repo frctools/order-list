@@ -79,6 +79,7 @@ const FRC_VENDORS: Array<{ match: string, name: string }> = [
   { match: 'ctr-electronics.com', name: 'Cross the Road Electronics' },
   { match: 'onlinemetals.com', name: 'Online Metals' },
   { match: 'mcmaster.com', name: 'McMaster-Carr' },
+  { match: 'studica.com', name: 'Studica' },
   { match: 'digikey.com', name: 'DigiKey' },
   { match: 'digikey.ca', name: 'DigiKey' }
 ]
@@ -482,6 +483,55 @@ function fromDigiKeyUrl(urlObj: URL): ExtractedProduct | null {
   }
 }
 
+// Studica runs nopCommerce behind a Cloudflare *managed* challenge, and it
+// covers everything — product pages, robots.txt, sitemap.xml, products.json,
+// and the .ca storefront too. The challenge keys on the client's fingerprint
+// rather than on headers or IP: curl with a browser User-Agent from a
+// residential address is refused, and so is headless Chrome. Only a headed
+// browser clears it. Delegating to vendord would not help, because vendord
+// makes the same kind of plain request this does.
+//
+// That is a shame rather than a parsing problem: their product pages carry a
+// complete schema.org Product block (name, sku, mpn, brand, offers.price)
+// that the JSON-LD path below would read perfectly. If Studica ever allowlist
+// us or publish a feed, delete this and let the ordinary extraction run.
+//
+// Until then the URL is all there is. Studica's product URLs are a single
+// flat slug at the root (/motor-pack), which is the same shape as their
+// category and marketing pages (/motors, /webinars) — so there is no way to
+// tell a product link from any other link, and the name below is a guess from
+// the slug. Deliberately no price and no SKU: a guessed name with an empty
+// price reads as the rough draft it is, whereas inventing a price would look
+// like a successful lookup.
+const STUDICA_SLUG = /^\/([a-z0-9][a-z0-9-]*)\/?$/i
+
+// Pages that are definitely not parts, so a stray paste doesn't become a line
+// item named "Cart". Categories are indistinguishable from products and are
+// not worth guessing at.
+const STUDICA_NON_PRODUCT = new Set([
+  'cart', 'checkout', 'login', 'register', 'search', 'compareproducts',
+  'contactus', 'customer', 'wishlist', 'recentlyviewedproducts', 'newproducts',
+  'privacy-notice', 'conditions-of-use', 'about-us', 'webinars', 'blog'
+])
+
+function fromStudicaUrl(urlObj: URL): ExtractedProduct | null {
+  const match = STUDICA_SLUG.exec(urlObj.pathname)
+  if (!match) return null
+  const slug = match[1]!.toLowerCase()
+  if (STUDICA_NON_PRODUCT.has(slug)) return null
+
+  return {
+    title: titleFromSlug(slug),
+    description: null,
+    price: null,
+    currency: 'USD',
+    sku: null,
+    variantId: null,
+    variantTitle: null,
+    variants: []
+  }
+}
+
 const URL_ONLY_VENDORS: Array<{
   domain: string
   parse: (urlObj: URL) => ExtractedProduct | null
@@ -490,7 +540,8 @@ const URL_ONLY_VENDORS: Array<{
   { domain: 'mcmaster.com', parse: fromMcMasterUrl },
   { domain: 'digikey.com', parse: fromDigiKeyUrl },
   // Canadian teams order from the .ca storefront; same URL shapes.
-  { domain: 'digikey.ca', parse: fromDigiKeyUrl }
+  { domain: 'digikey.ca', parse: fromDigiKeyUrl },
+  { domain: 'studica.com', parse: fromStudicaUrl }
 ]
 
 // ---- Amazon --------------------------------------------------------------

@@ -621,6 +621,8 @@ async function applyExtractedProduct(data: ExtractionResponse) {
     return
   }
 
+  isUrlDerived.value = data.source === 'url' && product.price == null
+
   if (data.vendorName) {
     formState.vendorId = data.vendorName
   }
