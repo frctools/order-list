@@ -16,7 +16,12 @@ import { organization, user } from './auth-schema'
 export const vendors = pgTable('vendors', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
-  type: text('type').notNull().$type<'shopify' | 'bigcommerce' | 'amazon'>(),
+  // 'swyft' is a one-store type, not a platform: Swyft runs a headless
+  // Shopify storefront on Next.js that serves none of the endpoints the
+  // 'shopify' scraper needs. See vendord/server/utils/swyft.ts.
+  type: text('type')
+    .notNull()
+    .$type<'shopify' | 'bigcommerce' | 'amazon' | 'swyft'>(),
   config: text('config').notNull(),
   hostname: text('hostname').notNull()
 })

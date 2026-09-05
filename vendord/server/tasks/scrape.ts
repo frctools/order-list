@@ -7,6 +7,7 @@ import {
   fetchBigCommerceProducts,
   bigCommerceToUnified
 } from '../utils/bigcommerce'
+import { fetchSwyftProducts } from '../utils/swyft'
 
 export default defineTask({
   meta: {
@@ -109,6 +110,38 @@ export default defineTask({
           } catch (error) {
             console.error(
               `Failed to scrape BigCommerce store ${vendor.hostname}:`,
+              error
+            )
+          }
+        } else if (vendor.type === 'swyft') {
+          try {
+            const products = await fetchSwyftProducts(vendor.hostname)
+
+            for (const unified of products) {
+              await db
+                .insert(productCache)
+                .values({
+                  vendorId: vendor.id,
+                  id: `${vendor.hostname}:${unified.handle}`,
+                  productJson: JSON.stringify(unified),
+                  updatedAt: new Date()
+                })
+                .onConflictDoUpdate({
+                  target: [productCache.id],
+                  set: {
+                    productJson: JSON.stringify(unified),
+                    updatedAt: new Date()
+                  }
+                })
+            }
+
+            console.log(
+              `Scraped ${products.length} products from Swyft store: `
+              + `${vendor.hostname}`
+            )
+          } catch (error) {
+            console.error(
+              `Failed to scrape Swyft store ${vendor.hostname}:`,
               error
             )
           }
