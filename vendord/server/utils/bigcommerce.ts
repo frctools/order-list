@@ -110,7 +110,17 @@ export async function getBigCommerceToken(hostname: string): Promise<{
   const tokenMatch = html.match(/"graphQLToken\\":\\"([^"]+)\\"/)
 
   if (!tokenMatch) {
-    throw new Error('Could not extract storefront token from BigCommerce page')
+    // Not every BigCommerce store exposes one. The token is a Stencil theme
+    // feature, and a server-rendered storefront that never calls the GraphQL
+    // API has no reason to embed it — goBILDA, ServoCity and BaneBots are all
+    // like this, on every template (home, cart, login, search), and their
+    // /graphql answers "credentials were missing" to an anonymous request.
+    // There is nothing to hunt for on those; they would need a different
+    // scraper built on their product sitemap (/xmlsitemap.php?type=products).
+    throw new Error(
+      `No storefront GraphQL token on ${hostname} — this store does not `
+      + `expose one, so it cannot be scraped through the GraphQL API`
+    )
   }
 
   const setCookies = res.headers.get('set-cookie') || ''
@@ -183,7 +193,12 @@ query paginateProducts(
           addToCartUrl
           minPurchaseQuantity
           defaultImage {
-            url(width: 80, height: 80)
+            # BigCommerce resizes on their CDN, so the size asked for here is
+            # the size stored and the size the search page renders. 80x80 was
+            # the thumbnail the list view wants, but the grid view shows the
+            # same URL in an aspect-square card several times that wide, where
+            # it came out visibly blurry.
+            url(width: 640, height: 640)
           }
           availabilityV2 {
             status

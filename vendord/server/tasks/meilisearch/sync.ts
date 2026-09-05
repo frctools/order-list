@@ -151,7 +151,7 @@ export default defineTask({
         error.cause?.code == "index_not_found"
       ) {
         client.createIndex(indexName);
-        console.log(`Created index ${index}`);
+        console.log(`Created index ${indexName}`);
       } else {
         throw error;
       }

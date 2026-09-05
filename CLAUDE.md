@@ -189,7 +189,17 @@ Every route calls `assertOrderInOrg()` first — a receipt id alone must never b
 
   **How the index gets filled.** Two Nitro tasks in vendord, chained: `scrape` walks every row of the `vendors` table — Shopify through `/products.json?limit=250&page=N`, BigCommerce through its storefront GraphQL — and upserts each product into `productCache`; it then runs `meilisearch:sync`, which joins `productCache` to `vendors` and pushes documents to the index. Trigger them at `GET /scrape` and `GET /sync` on vendord (dev: `localhost:3001`), and `scrape` is also on a nightly cron in `vendord/nitro.config.ts`. Both read `DATABASE_URL` and the `MEILISEARCH_*` vars, and vendord needs its own `bun install`.
 
-  **The `vendors` table is the input, and it does not seed itself** — an empty table means an empty index, with both tasks reporting success. Of the FRC vendors, four serve a usable Shopify `/products.json`: WestCoast Products, AndyMark, The Thrifty Bot and Cross the Road Electronics (`store.ctr-electronics.com`). Don't assume from the brand: goBILDA, ServoCity, REV Robotics and BaneBots are **BigCommerce**, and Swyft Robotics is Shopify but has the JSON endpoint switched off, so it cannot be scraped this way.
+  **The `vendors` table is the input, and it does not seed itself** — an empty table means an empty index, with both tasks reporting success. Five FRC vendors are reachable, and which platform a brand runs is not guessable:
+
+  | vendor | `type` | hostname |
+  | --- | --- | --- |
+  | WestCoast Products | `shopify` | `wcproducts.com` |
+  | AndyMark | `shopify` | `www.andymark.com` |
+  | The Thrifty Bot | `shopify` | `www.thethriftybot.com` |
+  | Cross the Road Electronics | `shopify` | `store.ctr-electronics.com` |
+  | REV Robotics | `bigcommerce` | `www.revrobotics.com` |
+
+  Three others are BigCommerce but **cannot** be scraped, and it is worth not re-deriving this: `getBigCommerceToken` lifts a storefront GraphQL token out of the homepage HTML, and **goBILDA, ServoCity and BaneBots don't publish one** — not on any template (home, cart, login, search), not at runtime (their storefronts are server-rendered Stencil and never call the GraphQL API), and their `/graphql` answers *"credentials were missing"* to an anonymous request. Reaching them would need a different scraper built on their product sitemap (`/xmlsitemap.php?type=products`) plus a page fetch each. Swyft Robotics is Shopify but has the JSON endpoint switched off, so it is out for the same practical reason.
 
   **Hybrid search is opt-in.** `search.get.ts` used to pass `hybrid: { embedder: "default" }` unconditionally, and Meilisearch rejects the whole request when no embedder is configured — *"Passing `hybrid` as a parameter requires enabling the `vector store` experimental feature"* — so every search failed on any instance without one, which is the default. It now sends `hybrid` only when `MEILISEARCH_EMBEDDER` names one, and otherwise runs keyword search over `title`/`description`/`vendorName`/`skus`.
 
