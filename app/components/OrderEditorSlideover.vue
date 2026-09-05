@@ -139,9 +139,9 @@
                 class="mt-0.5 size-4 shrink-0 text-warning-600 dark:text-warning-400"
               />
               <p class="min-w-0 text-gray-600 dark:text-gray-300">
-                This vendor blocks automated lookups, so the name is guessed
-                from the link and there is no price. Check the name and fill
-                in the price from the product page.
+                This vendor blocks automated lookups, so these details come
+                from the link alone and there is no price. Check the name and
+                fill in the price from the product page.
               </p>
             </div>
 
