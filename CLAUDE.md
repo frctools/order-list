@@ -189,7 +189,7 @@ Every route calls `assertOrderInOrg()` first — a receipt id alone must never b
 
   **How the index gets filled.** Two Nitro tasks in vendord, chained: `scrape` walks every row of the `vendors` table — Shopify through `/products.json?limit=250&page=N`, BigCommerce through its storefront GraphQL — and upserts each product into `productCache`; it then runs `meilisearch:sync`, which joins `productCache` to `vendors` and pushes documents to the index. Trigger them at `GET /scrape` and `GET /sync` on vendord (dev: `localhost:3001`), and `scrape` is also on a nightly cron in `vendord/nitro.config.ts`. Both read `DATABASE_URL` and the `MEILISEARCH_*` vars, and vendord needs its own `bun install`.
 
-  **The `vendors` table is the input, and it does not seed itself** — an empty table means an empty index, with both tasks reporting success. Five FRC vendors are reachable, and which platform a brand runs is not guessable:
+  **The `vendors` table is the input, and it does not seed itself** — an empty table means an empty index, with both tasks reporting success. Twelve FRC vendors are reachable, and which platform a brand runs is not guessable. Several of the smaller ones sit on a `shop.`/`store.` subdomain rather than the apex, and the apex does not always redirect to it, so the hostname in the table is the one that actually serves `/products.json`:
 
   | vendor | `type` | hostname |
   | --- | --- | --- |
@@ -199,6 +199,12 @@ Every route calls `assertOrderInOrg()` first — a receipt id alone must never b
   | Cross the Road Electronics | `shopify` | `store.ctr-electronics.com` |
   | REV Robotics | `bigcommerce` | `www.revrobotics.com` |
   | Swyft Robotics | `swyft` | `swyftrobotics.com` |
+  | Swerve Drive Specialties | `shopify` | `www.swervedrivespecialties.com` |
+  | Armabot | `shopify` | `www.armabot.com` |
+  | Last Anvil Innovations | `shopify` | `lastanvil.com` |
+  | Limelight Vision | `shopify` | `limelightvision.io` |
+  | Redux Robotics | `shopify` | `shop.reduxrobotics.com` |
+  | Copperforge | `shopify` | `shop.copperforge.cc` |
 
   **`swyft` is a one-store type, not a platform.** Swyft runs a *headless* Shopify storefront on Next.js, so none of the endpoints the `shopify` branch needs are served: `/products.json` and `/collections/all/products.json` both 404, and the sitemap is the Next.js app's own, with no `/products/{handle}` URLs in it. Only the CDN and checkout are still Shopify's. What the Next.js app does publish is better than either — every page embeds an RSC flight payload (`self.__next_f`) carrying complete product objects (`slug`, `sku`, `name`, `description`, `priceCents`, `image`, `shopifyProductId`, `shopifyVariantId`, `variants[]`), and each page carries not only its own product but every one it links to, so walking the sitemap's ~64 product pages yields the whole catalogue several times over, deduplicated by slug. `vendord/server/utils/swyft.ts` does this.
 
@@ -206,7 +212,7 @@ Every route calls `assertOrderInOrg()` first — a receipt id alone must never b
 
   Cart handoff is not wired up for it: `detectPlatform` returns `null` for a `swyft` vendorType, so no button appears. The scraped variants do carry `shopifyVariantId`, so Shopify cart permalinks could be made to work later.
 
-  Three others are BigCommerce but **cannot** be scraped, and it is worth not re-deriving this: `getBigCommerceToken` lifts a storefront GraphQL token out of the homepage HTML, and **goBILDA, ServoCity and BaneBots don't publish one** — not on any template (home, cart, login, search), not at runtime (their storefronts are server-rendered Stencil and never call the GraphQL API), and their `/graphql` answers *"credentials were missing"* to an anonymous request. Reaching them would need a different scraper built on their product sitemap (`/xmlsitemap.php?type=products`) plus a page fetch each. Swyft Robotics is Shopify but has the JSON endpoint switched off, so it is out for the same practical reason.
+  Three others are BigCommerce but **cannot** be scraped, and it is worth not re-deriving this: `getBigCommerceToken` lifts a storefront GraphQL token out of the homepage HTML, and **goBILDA, ServoCity and BaneBots don't publish one** — not on any template (home, cart, login, search), not at runtime (their storefronts are server-rendered Stencil and never call the GraphQL API), and their `/graphql` answers *"credentials were missing"* to an anonymous request. Reaching them would need a different scraper built on their product sitemap (`/xmlsitemap.php?type=products`) plus a page fetch each. Playing With Fusion, Robot Marketplace and Team221 run older platforms with no product feed at all, and Kauai Labs and Nexus Robot are WooCommerce with the public Store API (`/wp-json/wc/store/v1/products`) disabled — checked, all 404.
 
   **Hybrid search is opt-in.** `search.get.ts` used to pass `hybrid: { embedder: "default" }` unconditionally, and Meilisearch rejects the whole request when no embedder is configured — *"Passing `hybrid` as a parameter requires enabling the `vector store` experimental feature"* — so every search failed on any instance without one, which is the default. It now sends `hybrid` only when `MEILISEARCH_EMBEDDER` names one, and otherwise runs keyword search over `title`/`description`/`vendorName`/`skus`.
 
