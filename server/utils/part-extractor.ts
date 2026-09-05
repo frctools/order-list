@@ -532,6 +532,57 @@ function fromStudicaUrl(urlObj: URL): ExtractedProduct | null {
   }
 }
 
+// VEX runs Magento behind a Cloudflare rule stricter than Studica's. It
+// refuses curl and Node's fetch — so delegating to vendord would not help
+// either, since vendord makes the same kind of plain request — refuses
+// headless Chrome, and answers with a custom "Access Temporarily Blocked"
+// page rather than a challenge anything can solve. A headed browser does get
+// through, but only for roughly one navigation: a second page load in the
+// same session is blocked again.
+//
+// As with Studica that is a shame rather than a parsing problem. VEX product
+// pages carry a complete schema.org Product block (name, sku, mpn,
+// offers.price) that the JSON-LD path below would read perfectly, and their
+// robots.txt allows the product URLs. If VEX ever allowlist us, delete this
+// and let the ordinary extraction run.
+//
+// The URL is worth more here than it is at Studica, though. A VEX product
+// page is /276-4810.html, and that part number is exactly what the page
+// itself reports as both sku and mpn — so it is authoritative rather than a
+// guess. Only the description and the price are missing.
+//
+// Deliberately only the part-number shape is accepted. VEX serves slug pages
+// with the same .html suffix (/wheels.html, /gears.html, /v5-structure.html)
+// and those are *group* pages: marked up as a Product, named "Wheels", with a
+// null price and nothing orderable behind them. Turning one into a line item
+// would read as a successful lookup for a part that cannot be bought — the
+// same trap WCP's configurator pages set. Anchoring the digits also rejects
+// the near misses that begin with them: /123-kits.html and /393-motors.html
+// are slugs, not part numbers.
+const VEX_PART = /^\/(\d{3}-\d{4})\.html$/i
+
+function fromVexUrl(urlObj: URL): ExtractedProduct | null {
+  const match = VEX_PART.exec(urlObj.pathname)
+  if (!match) return null
+
+  // Teams write their BOMs against this number, and VEX sells only its own
+  // parts, so it stands alone as the name — there is no manufacturer to
+  // qualify it with the way a DigiKey line needs.
+  const partNumber = match[1]!
+
+  return {
+    title: partNumber,
+    description: null,
+    // Only ever on the page, never in the URL.
+    price: null,
+    currency: 'USD',
+    sku: partNumber,
+    variantId: null,
+    variantTitle: null,
+    variants: []
+  }
+}
+
 const URL_ONLY_VENDORS: Array<{
   domain: string
   parse: (urlObj: URL) => ExtractedProduct | null
@@ -541,7 +592,8 @@ const URL_ONLY_VENDORS: Array<{
   { domain: 'digikey.com', parse: fromDigiKeyUrl },
   // Canadian teams order from the .ca storefront; same URL shapes.
   { domain: 'digikey.ca', parse: fromDigiKeyUrl },
-  { domain: 'studica.com', parse: fromStudicaUrl }
+  { domain: 'studica.com', parse: fromStudicaUrl },
+  { domain: 'vexrobotics.com', parse: fromVexUrl }
 ]
 
 // ---- Amazon --------------------------------------------------------------
