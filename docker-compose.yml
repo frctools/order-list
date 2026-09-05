@@ -23,12 +23,27 @@ services:
     image: getmeili/meilisearch:v1.11
     restart: always
     environment:
-      MEILI_MASTER_KEY: ${MEILISEARCH_API_KEY:-devsearchkey}
-      MEILI_ENV: development
+      # MEILI_ENV is production in dev too, so the two behave alike -- which
+      # also means the key has to satisfy production's 16-byte minimum. The
+      # default below is not a secret and does not need to be: the port is
+      # bound to loopback. The droplet gets a generated one in its .env, which
+      # compose reads from the same file the app does.
+      MEILI_MASTER_KEY: ${MEILISEARCH_API_KEY:-local-dev-master-key-not-secret}
+      MEILI_ENV: production
     ports:
       - "127.0.0.1:${MEILISEARCH_PORT:-7700}:7700"
     volumes:
       - meilidata:/meili_data
+    # The droplet is 1 vCPU / 2 GB and already runs Postgres, Nuxt and vendord
+    # on it. Indexing spikes well above steady state, and an unbounded search
+    # engine that swaps takes the site with it -- capped, it restarts alone.
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 
 volumes:
   pgdata:

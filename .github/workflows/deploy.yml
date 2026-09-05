@@ -107,6 +107,45 @@ jobs:
       - name: Install dependencies on the droplet
         run: ssh -i ~/.ssh/id_ed25519 "$DEPLOY_USER@$DEPLOY_HOST" "cd $APP_DIR && bun install"
 
+      # Before the migrate that seeds vendors and the reload that reads .env.
+      # Nothing else in this workflow runs `docker compose up`, so without
+      # this step adding the service to docker-compose.yml would change
+      # nothing on the droplet and search would answer 500 on every query.
+      # Idempotent: compose only recreates containers whose config changed, so
+      # a deploy that touches nothing leaves Postgres alone.
+      - name: Start Meilisearch
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$DEPLOY_USER@$DEPLOY_HOST" "cd $APP_DIR && bash -s" <<'REMOTE'
+          set -euo pipefail
+          # .env is the droplet's own -- rsync excludes it -- so the search
+          # settings are added here rather than shipped. Appended only when
+          # absent, and the generated key is written once and then left alone:
+          # rotating it on every deploy would lock the running app out of its
+          # own index until the next reload.
+          if ! grep -q '^MEILISEARCH_HOST=' .env; then
+            {
+              echo ""
+              echo "# Product search (docker compose service 'meilisearch', loopback-bound)."
+              echo "MEILISEARCH_HOST=http://127.0.0.1:7700"
+              echo "MEILISEARCH_INDEX=products"
+            } >> .env
+          fi
+          if ! grep -q '^MEILISEARCH_API_KEY=' .env; then
+            echo "MEILISEARCH_API_KEY=$(openssl rand -hex 24)" >> .env
+          fi
+          docker compose up -d
+          for _ in $(seq 1 30); do
+            if curl -fsS -m 5 http://127.0.0.1:7700/health >/dev/null 2>&1; then
+              echo "meilisearch healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "meilisearch did not become healthy" >&2
+          docker compose logs --tail 40 meilisearch >&2 || true
+          exit 1
+          REMOTE
+
       # Before the reload, never after: the new code queries columns the old
       # database may not have yet. Driven by what is actually pending rather
       # than by a checkbox -- a checkbox someone forgets to tick is how the
@@ -153,3 +192,32 @@ jobs:
           echo "site did not come back healthy"
           ssh -i ~/.ssh/id_ed25519 "$DEPLOY_USER@$DEPLOY_HOST" "pm2 list; pm2 logs --nostream --lines 40" || true
           exit 1
+
+      # Only when the index is empty, which in practice means the first deploy
+      # after search shipped. A scrape walks twelve storefronts and takes
+      # minutes, so doing it every push would slow every deploy and hammer
+      # vendors for no reason; vendord's nightly task keeps it fresh after
+      # this. Never fails the deploy -- the site is already up and verified,
+      # and a stale index is not worth rolling back for.
+      - name: Populate search index if empty
+        continue-on-error: true
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$DEPLOY_USER@$DEPLOY_HOST" "cd $APP_DIR && bash -s" <<'REMOTE'
+          set -uo pipefail
+          key=$(grep '^MEILISEARCH_API_KEY=' .env | cut -d= -f2-)
+          stats=$(curl -fsS -m 10 -H "Authorization: Bearer $key" \
+            http://127.0.0.1:7700/indexes/products/stats 2>/dev/null || echo '')
+          count=$(printf '%s' "$stats" | sed -n 's/.*"numberOfDocuments":\([0-9]*\).*/\1/p')
+          if [ -n "$count" ] && [ "$count" -gt 0 ] 2>/dev/null; then
+            echo "index already holds $count documents; skipping scrape"
+            exit 0
+          fi
+          echo "index empty -- running the initial scrape (this takes a few minutes)"
+          curl -fsS -m 1800 http://127.0.0.1:3434/scrape || {
+            echo "scrape failed; run 'curl localhost:3434/scrape' on the droplet" >&2
+            exit 1
+          }
+          echo
+          curl -fsS -m 10 -H "Authorization: Bearer $key" \
+            http://127.0.0.1:7700/indexes/products/stats || true
+          REMOTE

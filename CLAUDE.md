@@ -38,9 +38,22 @@ everything else listens on localhost:
 | Nuxt | `127.0.0.1:3000` — `.output/server/index.mjs` under PM2 |
 | vendord | `127.0.0.1:3434` — the scraper, under PM2 |
 | Postgres | `127.0.0.1:5433` — `docker compose up -d`, container `parts-db-1` |
+| Meilisearch | `127.0.0.1:7700` — same compose file, container `parts-meilisearch-1`, capped at 512 MB |
 
 `deploy/provision.sh` builds the box from scratch and is safe to re-run. The
 app runs as the unprivileged `parts` user out of `/srv/parts`, not as root.
+
+**Search brings its own setup up.** `provision.sh` never ran `docker compose up`
+— Postgres was started by hand once — so the deploy workflow now does it, which
+is what makes the Meilisearch service in `docker-compose.yml` exist on the box
+at all. The same step appends `MEILISEARCH_HOST`/`INDEX` to the droplet's
+`.env` and generates `MEILISEARCH_API_KEY` if it is absent (rsync excludes
+`.env`, so it cannot be shipped), then waits for `/health`. It runs before the
+migrate that seeds vendors and before the reload that re-reads `.env`. The key
+is written once and never rotated on later deploys: rotating it would lock the
+running app out of its own index until the next reload. A final step scrapes
+**only when the index is empty**, so the first deploy populates and later ones
+stay fast; vendord's nightly task keeps it fresh after that.
 
 **Releases ship themselves.** `.github/workflows/deploy.yml` runs on every push
 to `main` (and on `workflow_dispatch`): it builds both outputs in CI, checks
