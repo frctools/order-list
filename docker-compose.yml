@@ -15,5 +15,21 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
+  # Product search. The scrape task fills productCache from each vendor's
+  # storefront, then meilisearch:sync indexes it here; server/api/vendors/
+  # search.get.ts queries it. Same loopback binding as Postgres above, for
+  # the same reason: a bare "7700:7700" would publish it past ufw.
+  meilisearch:
+    image: getmeili/meilisearch:v1.11
+    restart: always
+    environment:
+      MEILI_MASTER_KEY: ${MEILISEARCH_API_KEY:-devsearchkey}
+      MEILI_ENV: development
+    ports:
+      - "127.0.0.1:${MEILISEARCH_PORT:-7700}:7700"
+    volumes:
+      - meilidata:/meili_data
+
 volumes:
   pgdata:
+  meilidata:

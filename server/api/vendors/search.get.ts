@@ -62,14 +62,23 @@ export default defineEventHandler(async (event) => {
     };
   }
 
+  // Hybrid (keyword + semantic) search needs an embedder configured on the
+  // index, and Meilisearch rejects the whole request when there isn't one --
+  // "Passing `hybrid` as a parameter requires enabling the `vector store`
+  // experimental feature". Asking for it unconditionally meant every search
+  // failed on any instance without one, which is the default. Opt in by
+  // naming the embedder, and fall back to keyword search otherwise; keyword
+  // search over title/description/vendorName/skus is what the index is set up
+  // for and answers these queries perfectly well on its own.
+  const embedder = process.env.MEILISEARCH_EMBEDDER;
+
   const searchResults = await index.search(query.q, {
     limit: query.limit,
     filter,
     sort,
-    hybrid: {
-      embedder: "default",
-      semanticRatio: 0.5,
-    },
+    ...(embedder
+      ? { hybrid: { embedder, semanticRatio: 0.5 } }
+      : {}),
   });
 
   return {

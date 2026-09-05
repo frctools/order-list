@@ -30,6 +30,37 @@ interface TaskResult {
   indexName?: string;
 }
 
+// Shopify sends the description as a body_html blob, and it is both indexed
+// and rendered by the search page — so tags and entities would otherwise show
+// up in results and dilute relevance. No dependency for this: vendord has no
+// HTML library and one blob per product does not justify adding one.
+function htmlToText(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value) return undefined;
+  const text = value
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/\s+/g, " ")
+    .trim();
+  return text || undefined;
+}
+
+// Shopify quotes prices as strings ("19.99"). Meilisearch declares price
+// sortable and search.get.ts offers price-asc/price-desc, but sorting strings
+// is lexicographic — "119.99" lands between "11.00" and "12.00" — so the sort
+// silently returned nonsense. Store a number.
+function toNumber(value: unknown): number | undefined {
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value !== "string") return undefined;
+  const parsed = Number(value.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 export default defineTask({
   meta: {
     name: "meilisearch:sync",
@@ -83,9 +114,11 @@ export default defineTask({
           id: Buffer.from(cached.id).toString("base64").replace(/=/g, ""),
           title: product.title || "Unknown Product",
           description:
-            product.description || product.body_html || "No description",
+            htmlToText(product.description)
+            ?? htmlToText(product.body_html)
+            ?? "No description",
           image: product.image || product.images?.[0]?.src,
-          price: product.price ?? product.variants?.[0]?.price,
+          price: toNumber(product.price ?? product.variants?.[0]?.price),
           currency: product.currency,
           vendorId: cached.vendorId,
           vendorName: vendor.name || cached.vendorId,
