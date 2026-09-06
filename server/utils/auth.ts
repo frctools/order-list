@@ -43,7 +43,7 @@ export const useAuth = () =>
       },
     },
 
-    baseUrl: getRequestURL(useEvent()).origin,
+    baseURL: getRequestURL(useEvent()).origin,
     plugins: [
       organization({
         async sendInvitationEmail(data) {
