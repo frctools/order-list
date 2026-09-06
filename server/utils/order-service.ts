@@ -3,6 +3,7 @@ import { useDB } from "./db";
 import { orders, vendors, orderTags, tags } from "./schema";
 import { user as authUser } from "./auth-schema";
 import { eq, sql, and, inArray } from "drizzle-orm";
+import { requireOrganizationProject } from "./project-service";
 
 export const createOrderSchema = z.object({
   partName: z.string().min(1, "Part name is required"),
@@ -40,6 +41,7 @@ export const createOrderSchema = z.object({
     .or(z.literal(""))
     .transform((value) => (value ? value : null)),
   tagIds: z.array(z.string()).optional().default([]),
+  projectId: z.string().min(1).optional(),
 });
 
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
@@ -52,6 +54,7 @@ export interface OrderContext {
 export interface CreatedOrder {
   id: string;
   organizationId: string;
+  projectId: string;
   partName: string;
   description: string | null;
   status: "to_order" | "ordered" | "arrived";
@@ -135,6 +138,7 @@ async function fetchOrderWithDetails(
     .select({
       id: orders.id,
       organizationId: orders.organizationId,
+      projectId: orders.projectId,
       partName: orders.partName,
       description: orders.description,
       status: orders.status,
@@ -180,6 +184,10 @@ export async function createOrder(
 ): Promise<CreatedOrder> {
   const db = useDB();
   const { organizationId, userId } = context;
+  const project = await requireOrganizationProject(
+    organizationId,
+    payload.projectId,
+  );
 
   const { vendorId, vendorName } = await resolveVendor(db, payload.vendorId);
 
@@ -188,6 +196,7 @@ export async function createOrder(
   await db.insert(orders).values({
     id: orderId,
     organizationId,
+    projectId: project.id,
     partName: payload.partName,
     description:
       payload.description && payload.description.length > 0
@@ -218,6 +227,17 @@ export async function createOrdersBulk(
 ): Promise<CreatedOrder[]> {
   const db = useDB();
   const { organizationId, userId } = context;
+
+  const requestedProjectIds = [
+    ...new Set(payloads.map((payload) => payload.projectId).filter(Boolean)),
+  ];
+  if (requestedProjectIds.length > 1) {
+    throw new Error("Bulk-created orders must belong to one project");
+  }
+  const project = await requireOrganizationProject(
+    organizationId,
+    requestedProjectIds[0],
+  );
 
   // Resolve all unique vendors in one go
   const uniqueVendorInputs = [
@@ -259,6 +279,7 @@ export async function createOrdersBulk(
     return {
       id: orderId,
       organizationId,
+      projectId: project.id,
       partName: payload.partName,
       description:
         payload.description && payload.description.length > 0
@@ -355,6 +376,7 @@ export async function createOrdersBulk(
     .select({
       id: orders.id,
       organizationId: orders.organizationId,
+      projectId: orders.projectId,
       partName: orders.partName,
       description: orders.description,
       status: orders.status,

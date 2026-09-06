@@ -9,6 +9,7 @@ definePageMeta({
 const route = useRoute();
 const auth = useAuth();
 const orgs = useOrgs();
+const projects = useProjects();
 const toast = useToast();
 
 const shareId = computed(() => String(route.params.shareId ?? ""));
@@ -77,10 +78,19 @@ async function addKitToOrders() {
 
   isImporting.value = true;
   try {
+    await projects.fetchProjects();
+    const projectId = projects.project.value?.id;
+    if (!projectId) {
+      throw new Error("Select a project before adding this kit to orders.");
+    }
+
     const response = await $fetch<{ orders: Order[] }>("/api/orders/bulk", {
       method: "POST",
       body: {
-        orders: buildOrderPayload(),
+        orders: buildOrderPayload().map((order) => ({
+          ...order,
+          projectId,
+        })),
       },
     });
 

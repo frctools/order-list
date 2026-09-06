@@ -30,6 +30,7 @@ const viewMode = useRouteQuery<"grid" | "list">("view", "grid");
 
 interface SearchResultItem {
   id: string;
+  productId?: string;
   title: string;
   description: string;
   vendorName: string;
@@ -78,6 +79,7 @@ const searchResults = computed((): SearchResultItem[] => {
   if (!searchData.value?.hits) return [];
   return searchData.value.hits.map((item) => ({
     id: item.id,
+    productId: item.productId,
     title: item.title,
     description: (item.description || "").replace(/<[^>]*>?/gm, ""),
     vendorName: item.vendorName,
@@ -121,6 +123,22 @@ function clearFilters() {
 
 function getAddToOrderUrl(originalUrl: string) {
   return `/app?add=${encodeURIComponent(originalUrl)}`;
+}
+
+function getProductUrl(item: SearchResultItem) {
+  const slug = item.title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64) || 'product';
+  const key = item.id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
+  return {
+    path: `/products/${slug}-${key}`,
+    query: {
+      url: item.originalUrl || undefined,
+      productId: item.productId || undefined,
+    },
+  };
 }
 
 const canCreateKit = computed(
@@ -269,7 +287,8 @@ async function goToCreateKitPage() {
           :key="item.id"
           class="flex flex-col"
         >
-          <div
+          <NuxtLink
+            :to="getProductUrl(item)"
             class="aspect-square bg-elevated rounded-lg mb-3 overflow-hidden"
           >
             <img
@@ -281,7 +300,7 @@ async function goToCreateKitPage() {
             <div v-else class="w-full h-full flex items-center justify-center">
               <UIcon name="i-lucide-package" class="w-12 h-12 text-muted" />
             </div>
-          </div>
+          </NuxtLink>
 
           <div class="flex-1 flex flex-col">
             <UBadge
@@ -292,9 +311,11 @@ async function goToCreateKitPage() {
             >
               {{ item.vendorName }}
             </UBadge>
-            <h3 class="font-medium line-clamp-2 mb-1 word-break-word">
-              {{ item.title }}
-            </h3>
+            <NuxtLink :to="getProductUrl(item)" class="hover:text-primary">
+              <h3 class="font-medium line-clamp-2 mb-1 word-break-word">
+                {{ item.title }}
+              </h3>
+            </NuxtLink>
             <p
               v-if="item.description"
               class="text-sm text-muted line-clamp-2 mb-2 break-all"
@@ -311,6 +332,14 @@ async function goToCreateKitPage() {
                 </p>
               </div>
               <div class="flex gap-1">
+                <UButton
+                  :to="getProductUrl(item)"
+                  icon="i-lucide-chart-no-axes-column"
+                  size="sm"
+                  variant="ghost"
+                >
+                  Details
+                </UButton>
                 <UButton
                   v-if="item.originalUrl"
                   :to="getAddToOrderUrl(item.originalUrl)"
@@ -356,9 +385,11 @@ async function goToCreateKitPage() {
           <div class="flex-1 min-w-0">
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
-                <h3 class="font-medium truncate">
-                  {{ item.title }}
-                </h3>
+                <NuxtLink :to="getProductUrl(item)" class="hover:text-primary">
+                  <h3 class="font-medium truncate">
+                    {{ item.title }}
+                  </h3>
+                </NuxtLink>
                 <p
                   v-if="item.description"
                   class="text-sm text-muted line-clamp-1"
@@ -373,6 +404,14 @@ async function goToCreateKitPage() {
                 >
                   {{ formatPrice(item.price, item.currency) }}
                 </p>
+                <UButton
+                  :to="getProductUrl(item)"
+                  icon="i-lucide-chart-no-axes-column"
+                  size="sm"
+                  variant="ghost"
+                >
+                  Details
+                </UButton>
                 <UButton
                   v-if="item.originalUrl"
                   :to="getAddToOrderUrl(item.originalUrl)"

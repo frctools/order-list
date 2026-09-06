@@ -129,6 +129,7 @@ export function useOrgs() {
     const { showToast = true } = options
     const isActive = await ensureActiveOrganization(id)
     if (!isActive) return
+    useProjects().clearProjects()
     await fetchCurrentOrganization()
     if (showToast) {
       toast.add({
@@ -210,6 +211,7 @@ export function useOrgs() {
     activeOrganizationId.value = null
     organizations.value = []
     organization.value = null
+    useProjects().clearProjects()
   }
 
   return {

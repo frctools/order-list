@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { useDB } from "../../../server/utils/db";
 import { vendors, productCache } from "../../../server/utils/schema";
+import {
+  generateProductId,
+  recordProductSnapshot,
+} from "../../../server/utils/product-history";
 import { eq } from "drizzle-orm";
 import parse from "../../../server/utils/set-cookie-parser";
 import { parseHTML } from "linkedom";
@@ -15,22 +19,6 @@ import {
 const querySchema = z.object({
   url: z.string().trim().min(1, "URL is required").url("Enter a valid URL"),
 });
-
-function generateProductId(urlObj: URL, vendorType?: string | null): string {
-  const hostname = urlObj.hostname;
-
-  if (vendorType === "shopify") {
-    const pathParts = urlObj.pathname.split("/").filter(Boolean);
-    const productIndex = pathParts.indexOf("products");
-    if (productIndex !== -1 && pathParts[productIndex + 1]) {
-      const handle = pathParts[productIndex + 1];
-      return `${hostname}:${handle}`;
-    }
-  }
-
-  const cleanPath = urlObj.pathname.replace(/^\/|\/$/g, "") || "/";
-  return `${hostname}:${cleanPath}`;
-}
 
 export default eventHandler(async (event) => {
   const rawQuery = getQuery(event);
@@ -210,20 +198,11 @@ export default eventHandler(async (event) => {
       },
     };
 
-    await db
-      .insert(productCache)
-      .values({
-        id: productId,
-        productJson: JSON.stringify(product),
-        vendorId: genericVendor.id,
-      })
-      .onConflictDoUpdate({
-        target: productCache.id,
-        set: {
-          productJson: JSON.stringify(product),
-          updatedAt: new Date(),
-        },
-      });
+    await recordProductSnapshot({
+      id: productId,
+      product,
+      vendorId: genericVendor.id,
+    });
 
     return {
       ...result,
@@ -257,20 +236,11 @@ export default eventHandler(async (event) => {
         productData,
       };
 
-      await db
-        .insert(productCache)
-        .values({
-          id: productId,
-          productJson: JSON.stringify(productData.product),
-          vendorId: vendor.id,
-        })
-        .onConflictDoUpdate({
-          target: productCache.id,
-          set: {
-            productJson: JSON.stringify(productData.product),
-            updatedAt: new Date(),
-          },
-        });
+      await recordProductSnapshot({
+        id: productId,
+        product: productData.product,
+        vendorId: vendor.id,
+      });
 
       return {
         ...result,
@@ -440,20 +410,11 @@ export default eventHandler(async (event) => {
       productData: { product: unified },
     };
 
-    await db
-      .insert(productCache)
-      .values({
-        id: productId,
-        productJson: JSON.stringify(unified),
-        vendorId: vendor.id,
-      })
-      .onConflictDoUpdate({
-        target: productCache.id,
-        set: {
-          productJson: JSON.stringify(unified),
-          updatedAt: new Date(),
-        },
-      });
+    await recordProductSnapshot({
+      id: productId,
+      product: unified,
+      vendorId: vendor.id,
+    });
 
     return {
       ...result,
@@ -516,20 +477,11 @@ export default eventHandler(async (event) => {
       },
     };
 
-    await db
-      .insert(productCache)
-      .values({
-        id: productId,
-        productJson: JSON.stringify(result.productData.product),
-        vendorId: vendor.id,
-      })
-      .onConflictDoUpdate({
-        target: productCache.id,
-        set: {
-          productJson: JSON.stringify(result.productData.product),
-          updatedAt: new Date(),
-        },
-      });
+    await recordProductSnapshot({
+      id: productId,
+      product: result.productData.product,
+      vendorId: vendor.id,
+    });
 
     return {
       ...result,

@@ -1,6 +1,7 @@
 import { defineTask, runTask } from 'nitropack/runtime'
 import { useDB } from '../../../server/utils/db'
-import { vendors, productCache } from '../../../server/utils/schema'
+import { vendors } from '../../../server/utils/schema'
+import { recordProductSnapshot } from '../../../server/utils/product-history'
 import { setTimeout } from 'timers/promises'
 import {
   getBigCommerceToken,
@@ -41,21 +42,12 @@ export default defineTask({
 
             // store products in productCache
             for (const product of products) {
-              await db
-                .insert(productCache)
-                .values({
-                  vendorId: vendor.id,
-                  id: `${vendor.hostname}:${product.handle}`,
-                  productJson: product,
-                  updatedAt: new Date(product.updated_at)
-                })
-                .onConflictDoUpdate({
-                  target: [productCache.id],
-                  set: {
-                    productJson: product,
-                    updatedAt: new Date(product.updated_at)
-                  }
-                })
+              await recordProductSnapshot({
+                vendorId: vendor.id,
+                id: `${vendor.hostname}:${product.handle}`,
+                product,
+                cacheUpdatedAt: new Date(product.updated_at)
+              })
             }
 
             if (products.length < 250) {
@@ -84,21 +76,11 @@ export default defineTask({
               const unified = bigCommerceToUnified(product)
               const productId = `${vendor.hostname}:${unified.handle}`
 
-              await db
-                .insert(productCache)
-                .values({
-                  vendorId: vendor.id,
-                  id: productId,
-                  productJson: JSON.stringify(unified),
-                  updatedAt: new Date()
-                })
-                .onConflictDoUpdate({
-                  target: [productCache.id],
-                  set: {
-                    productJson: JSON.stringify(unified),
-                    updatedAt: new Date()
-                  }
-                })
+              await recordProductSnapshot({
+                vendorId: vendor.id,
+                id: productId,
+                product: unified
+              })
 
               await setTimeout(10) // Small delay between inserts
             }

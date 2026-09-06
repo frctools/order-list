@@ -6,7 +6,8 @@ import {
   integer,
   primaryKey,
   index,
-  boolean
+  boolean,
+  uniqueIndex
 } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { organization, user } from './auth-schema'
@@ -35,32 +36,71 @@ export const orderStatusEnum = pgEnum('order_status', [
   'arrived'
 ])
 
-export const orders = pgTable('orders', {
-  id: text('id').primaryKey(),
-  organizationId: text('organization_id')
-    .notNull()
-    .references(() => organization.id, { onDelete: 'cascade' }),
-  partName: text('part_name').notNull(),
-  description: text('description'),
-  status: orderStatusEnum('status').default('to_order').notNull(),
-  quantity: integer('quantity').default(1).notNull(),
-  unitPriceCents: integer('unit_price_cents'),
-  variantId: text('variant_id'),
-  variantTitle: text('variant_title'),
-  vendorId: text('vendor_id'),
-  vendorName: text('vendor_name'),
-  externalUrl: text('external_url'),
-  orderedAt: timestamp('ordered_at'),
-  arrivedAt: timestamp('arrived_at'),
-  requestedBy: text('requested_by')
-    .notNull()
-    .references(() => user.id, { onDelete: 'restrict' }),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at')
-    .defaultNow()
-    .$onUpdate(() => /* @__PURE__ */ new Date())
-    .notNull()
-})
+export const projects = pgTable(
+  'projects',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    slug: text('slug').notNull(),
+    description: text('description'),
+    color: text('color').default('#2563eb').notNull(),
+    isArchived: boolean('is_archived').default(false).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at')
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull()
+  },
+  table => [
+    index('projects_organizationId_idx').on(table.organizationId),
+    uniqueIndex('projects_organizationId_slug_unique').on(
+      table.organizationId,
+      table.slug
+    )
+  ]
+)
+
+export const orders = pgTable(
+  'orders',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'restrict' }),
+    partName: text('part_name').notNull(),
+    description: text('description'),
+    status: orderStatusEnum('status').default('to_order').notNull(),
+    quantity: integer('quantity').default(1).notNull(),
+    unitPriceCents: integer('unit_price_cents'),
+    variantId: text('variant_id'),
+    variantTitle: text('variant_title'),
+    vendorId: text('vendor_id'),
+    vendorName: text('vendor_name'),
+    externalUrl: text('external_url'),
+    orderedAt: timestamp('ordered_at'),
+    arrivedAt: timestamp('arrived_at'),
+    requestedBy: text('requested_by')
+      .notNull()
+      .references(() => user.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at')
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull()
+  },
+  table => [
+    index('orders_organizationId_projectId_idx').on(
+      table.organizationId,
+      table.projectId
+    )
+  ]
+)
 
 export const orderTags = pgTable(
   'order_tags',
@@ -94,7 +134,19 @@ export const orderTagsRelations = relations(orderTags, ({ one }) => ({
   })
 }))
 
-export const ordersRelations = relations(orders, ({ many }) => ({
+export const projectsRelations = relations(projects, ({ one, many }) => ({
+  organization: one(organization, {
+    fields: [projects.organizationId],
+    references: [organization.id]
+  }),
+  orders: many(orders)
+}))
+
+export const ordersRelations = relations(orders, ({ one, many }) => ({
+  project: one(projects, {
+    fields: [orders.projectId],
+    references: [projects.id]
+  }),
   orderTags: many(orderTags)
 }))
 
@@ -114,6 +166,38 @@ export const productCacheRelations = relations(productCache, ({ one }) => ({
     references: [vendors.id]
   })
 }))
+
+export const productSnapshots = pgTable(
+  'product_snapshots',
+  {
+    id: text('id').primaryKey(),
+    productId: text('product_id')
+      .notNull()
+      .references(() => productCache.id, { onDelete: 'cascade' }),
+    vendorId: text('vendor_id').notNull(),
+    priceCents: integer('price_cents'),
+    stockQuantity: integer('stock_quantity'),
+    currency: text('currency'),
+    capturedAt: timestamp('captured_at').defaultNow().notNull()
+  },
+  table => [
+    index('product_snapshots_productId_capturedAt_idx').on(
+      table.productId,
+      table.capturedAt
+    ),
+    index('product_snapshots_vendorId_idx').on(table.vendorId)
+  ]
+)
+
+export const productSnapshotsRelations = relations(
+  productSnapshots,
+  ({ one }) => ({
+    product: one(productCache, {
+      fields: [productSnapshots.productId],
+      references: [productCache.id]
+    })
+  })
+)
 
 export const kits = pgTable(
   'kits',

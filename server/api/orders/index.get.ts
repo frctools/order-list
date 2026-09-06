@@ -1,18 +1,22 @@
 import { defineEventHandler } from 'h3'
-import { eq, desc, sql } from 'drizzle-orm'
+import { and, eq, desc, sql } from 'drizzle-orm'
 import { useDB } from '../../utils/db'
 import { orders, vendors, orderTags, tags } from '../../utils/schema'
 import { user as authUser } from '../../utils/auth-schema'
 import { requireOrganizationContext } from '../../utils/session'
+import { requireOrganizationProject } from '../../utils/project-service'
 
 export default defineEventHandler(async (event) => {
   const { organizationId } = await requireOrganizationContext(event)
+  const projectId = getQuery(event).projectId as string | undefined
+  const project = await requireOrganizationProject(organizationId, projectId)
   const db = useDB()
 
   const orderRecords = await db
     .select({
       id: orders.id,
       organizationId: orders.organizationId,
+      projectId: orders.projectId,
       partName: orders.partName,
       description: orders.description,
       status: orders.status,
@@ -36,7 +40,12 @@ export default defineEventHandler(async (event) => {
     .from(orders)
     .leftJoin(vendors, eq(orders.vendorId, vendors.id))
     .leftJoin(authUser, eq(orders.requestedBy, authUser.id))
-    .where(eq(orders.organizationId, organizationId))
+    .where(
+      and(
+        eq(orders.organizationId, organizationId),
+        eq(orders.projectId, project.id)
+      )
+    )
     .orderBy(desc(orders.createdAt))
 
   const orderIds = orderRecords.map(o => o.id)
@@ -70,6 +79,7 @@ export default defineEventHandler(async (event) => {
   }))
 
   return {
-    orders: ordersWithTags
+    orders: ordersWithTags,
+    project
   }
 })

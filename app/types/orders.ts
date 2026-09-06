@@ -9,6 +9,7 @@ export type Tag = {
 }
 
 export type OrderEditorValues = {
+  projectId?: string
   partName: string
   quantity: number
   description: string | undefined

@@ -152,6 +152,7 @@ export default defineNuxtConfig({
   },
 
   plausible: {
+    enabled: process.env.NODE_ENV === "production",
     // Prevent tracking on localhost
     ignoredHostnames: ["localhost"],
     apiHost: "https://possible.grahamsh.com",
@@ -160,5 +161,8 @@ export default defineNuxtConfig({
   sentry: {
     org: "frctools",
     project: "frctools-orders",
+    sourcemaps: {
+      disable: process.env.SENTRY_DISABLE_SOURCE_MAPS === "true",
+    },
   },
 });

@@ -241,6 +241,7 @@ export default defineEventHandler(async (event) => {
     .select({
       id: orders.id,
       organizationId: orders.organizationId,
+      projectId: orders.projectId,
       partName: orders.partName,
       description: orders.description,
       status: orders.status,

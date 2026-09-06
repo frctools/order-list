@@ -1,15 +1,21 @@
 <template>
   <div class="min-h-screen bg-default">
-    <UContainer class="mx-auto flex flex-col gap-10 py-10">
+    <UContainer class="mx-auto flex flex-col gap-6 py-6 lg:py-8">
       <header class="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1
-            class="text-3xl font-semibold tracking-tight text-primary-900 dark:text-primary-100"
-          >
-            Orders
-          </h1>
-          <p class="text-sm text-gray-500">
-            Track parts from request to delivery for your team.
+          <p class="mb-1 text-xs font-semibold uppercase tracking-wider text-primary">
+            Project order board
+          </p>
+          <div class="flex flex-wrap items-center gap-3">
+            <h1
+              class="text-3xl font-semibold tracking-tight text-primary-900 dark:text-primary-100"
+            >
+              Orders
+            </h1>
+            <ProjectSwitcher @change="handleProjectChange" />
+          </div>
+          <p class="mt-1 max-w-2xl text-sm text-gray-500">
+            {{ projects.project.value?.description || 'Track parts from request to delivery for this project.' }}
           </p>
         </div>
 
@@ -53,6 +59,51 @@
         :description="extractErrorMessage(error)"
       />
 
+      <div
+        class="sticky top-2 z-20 rounded-2xl border border-default bg-default/90 p-3 shadow-sm backdrop-blur"
+      >
+        <div class="flex flex-wrap items-center gap-2">
+          <UInput
+            v-model="searchFilter"
+            icon="i-lucide-search"
+            placeholder="Search parts, vendors, people…"
+            class="min-w-56 flex-1"
+          />
+          <USelectMenu
+            v-model="vendorFilter"
+            :items="vendorOptions"
+            value-key="value"
+            searchable
+            placeholder="All vendors"
+            class="w-44"
+          />
+          <USelectMenu
+            v-model="statusFilter"
+            :items="statusOptions"
+            value-key="value"
+            placeholder="All statuses"
+            class="w-40"
+          />
+          <USelectMenu
+            v-model="tagFilter"
+            :items="tagOptions"
+            value-key="value"
+            searchable
+            placeholder="All tags"
+            class="w-40"
+          />
+          <UButton
+            v-if="activeFilterCount"
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-x"
+            @click="clearFilters"
+          >
+            Clear {{ activeFilterCount }}
+          </UButton>
+        </div>
+      </div>
+
       <div v-if="viewMode === 'board'">
         <div
           v-if="isPending && ordersState.length === 0"
@@ -65,11 +116,14 @@
           />
         </div>
 
-        <div v-else class="grid gap-4 md:grid-cols-3">
-          <div
+        <div
+          v-else
+          class="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-3 lg:mx-0 lg:grid lg:grid-cols-3 lg:overflow-visible lg:px-0"
+        >
+          <section
             v-for="column in boardColumns"
             :key="column.key"
-            class="flex flex-col"
+            class="flex min-w-[86vw] snap-center flex-col sm:min-w-96 lg:min-w-0"
           >
             <div class="mb-3 flex items-center justify-between gap-3">
               <div>
@@ -86,7 +140,7 @@
             </div>
 
             <div
-              class="flex-1 space-y-3 rounded-xl border border-dashed border-gray-300/60 bg-white/80 p-3 transition-all dark:bg-gray-950/60"
+              class="h-[calc(100dvh-18rem)] min-h-96 flex-1 space-y-3 overflow-y-auto overscroll-contain rounded-xl border border-dashed border-gray-300/60 bg-white/80 p-3 transition-all dark:bg-gray-950/60"
               :class="
                 dropTarget === column.key
                   ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-transparent'
@@ -100,13 +154,14 @@
                 v-if="column.items.length === 0"
                 class="py-10 text-center text-sm text-gray-500"
               >
-                Drag an order here or create a new one.
+                {{ activeFilterCount ? 'No matching orders in this stage.' : 'Drag an order here or create a new one.' }}
               </p>
 
               <UCard
                 v-for="order in column.items"
                 :key="order.id"
-                class="cursor-grab active:cursor-grabbing"
+                class="cursor-grab shadow-sm active:cursor-grabbing"
+                :ui="{ header: 'p-3 sm:p-3', body: 'p-3 sm:p-3', footer: 'p-2 sm:p-2' }"
                 :draggable="!isOrderUpdating(order.id)"
                 @dragstart="onDragStart(order.id)"
                 @dragend="onDragEnd"
@@ -133,7 +188,7 @@
                 <div class="space-y-3">
                   <p
                     v-if="order.description"
-                    class="text-sm text-gray-500 dark:text-gray-300"
+                    class="line-clamp-2 text-sm text-gray-500 dark:text-gray-300"
                   >
                     {{ order.description }}
                   </p>
@@ -255,12 +310,12 @@
                 </template>
               </UCard>
             </div>
-          </div>
+          </section>
         </div>
       </div>
 
       <div v-else class="overflow-hidden">
-        <div class="mb-4 grid gap-4 md:grid-cols-3">
+        <div class="mb-4 grid gap-4 md:grid-cols-2">
           <div class="space-y-2">
             <UFormField label="Start date">
               <UInput
@@ -274,50 +329,6 @@
           <div class="space-y-2">
             <UFormField label="End date">
               <UInput v-model="endDate" type="date" class="w-full" size="xl" />
-            </UFormField>
-          </div>
-          <div class="space-y-2">
-            <UFormField label="Vendor">
-              <USelectMenu
-                v-model="vendorFilter"
-                :items="vendorOptions"
-                value-key="value"
-                searchable
-                placeholder="All vendors"
-                class="w-full"
-                size="xl"
-              />
-            </UFormField>
-          </div>
-          <div class="space-y-2">
-            <UFormField label="Status">
-              <USelectMenu
-                v-model="statusFilter"
-                :items="
-                  Object.values(statusLookup).map((x) => ({
-                    value: x.key,
-                    label: x.label,
-                  }))
-                "
-                value-key="value"
-                searchable
-                placeholder="All statuses"
-                class="w-full"
-                size="xl"
-              />
-            </UFormField>
-          </div>
-          <div class="space-y-2">
-            <UFormField label="Tag">
-              <USelectMenu
-                v-model="tagFilter"
-                :items="tagOptions"
-                value-key="value"
-                searchable
-                placeholder="All tags"
-                class="w-full"
-                size="xl"
-              />
             </UFormField>
           </div>
         </div>
@@ -359,13 +370,14 @@
         <div v-if="isPending && ordersState.length === 0" class="space-y-2">
           <USkeleton v-for="row in 6" :key="row" class="h-12 rounded-lg" />
         </div>
-        <UTable
-          v-else
-          :columns="orderTableColumns"
-          :data="filteredTableRows"
-          :loading="isPending"
-          class="w-full"
-        >
+        <div v-else class="max-h-[70dvh] overflow-auto rounded-xl border border-default">
+          <UTable
+            :columns="orderTableColumns"
+            :data="filteredTableRows"
+            :loading="isPending"
+            sticky
+            class="w-full"
+          >
           <template #partName-cell="{ row }">
             <div class="flex flex-col">
               <span
@@ -477,7 +489,8 @@
               </UButton>
             </div>
           </template>
-        </UTable>
+          </UTable>
+        </div>
       </div>
 
       <div
@@ -488,8 +501,7 @@
           No orders yet
         </h3>
         <p class="mx-auto mt-1 max-w-lg text-sm text-gray-500">
-          Start your purchasing pipeline by adding the first part request for
-          your organization.
+          Start this project by adding its first part request.
         </p>
         <div class="mt-6">
           <UButton icon="i-lucide-plus" @click="() => openCreateEditor()">
@@ -530,6 +542,9 @@ const route = useRoute();
 const router = useRouter();
 const auth = useAuth();
 const orgs = useOrgs();
+const projects = useProjects();
+await projects.fetchProjects();
+const activeProjectId = computed(() => projects.project.value?.id ?? null);
 
 const toast = useToast();
 const overlay = useOverlay();
@@ -565,6 +580,11 @@ type StatusKey = (typeof statuses)[number]["key"];
 const statusLookup = Object.fromEntries(
   statuses.map((status) => [status.key, status]),
 ) as Record<StatusKey, (typeof statuses)[number]>;
+
+const statusOptions = statuses.map(status => ({
+  value: status.key,
+  label: status.label,
+}));
 
 const viewOptions = ref([
   {
@@ -676,7 +696,7 @@ const {
   isError,
   error,
   suspense,
-} = useOrdersQuery();
+} = useOrdersQuery(activeProjectId);
 await suspense();
 
 const { data: tagsData } = await useFetch("/api/tags", {
@@ -701,6 +721,7 @@ watch(
 
 const startDate = ref<string | undefined>(undefined);
 const endDate = ref<string | undefined>(undefined);
+const searchFilter = ref("");
 const vendorFilter = ref<string>("");
 const statusFilter = ref<StatusKey | undefined>(undefined);
 const tagFilter = ref<string>("");
@@ -733,6 +754,21 @@ function parseISODate(value?: string | null) {
 
 const filteredTableRows = computed(() => {
   return tableRows.value.filter((row) => {
+    if (searchFilter.value.trim()) {
+      const search = searchFilter.value.trim().toLocaleLowerCase();
+      const haystack = [
+        row.partName,
+        row.description,
+        row.vendorName,
+        row.requestedByName,
+        row.variantTitle,
+        ...(row.tags?.map(tag => tag.name) ?? []),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLocaleLowerCase();
+      if (!haystack.includes(search)) return false;
+    }
     if (vendorFilter.value && row.vendorKey !== vendorFilter.value)
       return false;
     if (statusFilter.value && row.status != statusFilter.value) return false;
@@ -765,6 +801,7 @@ const filteredCount = computed(() => filteredTableRows.value.length);
 const isExportingCsv = ref(false);
 
 function clearFilters() {
+  searchFilter.value = "";
   startDate.value = undefined;
   endDate.value = undefined;
   vendorFilter.value = "";
@@ -772,12 +809,25 @@ function clearFilters() {
   tagFilter.value = "";
 }
 
+const activeFilterCount = computed(() =>
+  [
+    searchFilter.value,
+    vendorFilter.value,
+    statusFilter.value,
+    tagFilter.value,
+    startDate.value,
+    endDate.value,
+  ].filter(Boolean).length,
+);
+
 const statusSequence: StatusKey[] = statuses.map((status) => status.key);
 
 const boardColumns = computed(() =>
   statuses.map((status) => ({
     ...status,
-    items: ordersState.value.filter((order) => order.status === status.key),
+    items: filteredTableRows.value.filter(
+      (order) => order.status === status.key,
+    ),
   })),
 );
 
@@ -891,7 +941,7 @@ async function createOrderFromEditor(
   try {
     const response = await $fetch<{ order: Order }>("/api/orders", {
       method: "POST",
-      body: values,
+      body: { ...values, projectId: activeProjectId.value },
     });
 
     upsertOrder(response.order);
@@ -1058,6 +1108,13 @@ async function refreshOrders() {
   await refetch();
 }
 
+async function handleProjectChange() {
+  ordersState.value = [];
+  clearFilters();
+  await nextTick();
+  await refetch();
+}
+
 async function handleImportClick() {
   const instance = importModal.open();
   await instance.result;
@@ -1152,6 +1209,16 @@ watchEffect(() => {
     refreshOrders();
   }
 });
+
+watch(
+  () => orgs.organization.value?.id,
+  async (organizationId, previousOrganizationId) => {
+    if (!organizationId || organizationId === previousOrganizationId) return;
+    ordersState.value = [];
+    clearFilters();
+    await projects.fetchProjects({ force: true });
+  },
+);
 
 const textColor = (colorStr: string) => {
   const color = new TinyColor(colorStr);

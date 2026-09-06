@@ -5,6 +5,7 @@ import { productCache, vendors } from "../../../../server/utils/schema";
 
 interface ProductDocument {
   id: string;
+  productId: string;
   title: string;
   description?: string;
   image?: string;
@@ -81,6 +82,7 @@ export default defineTask({
 
         return {
           id: Buffer.from(cached.id).toString("base64").replace(/=/g, ""),
+          productId: cached.id,
           title: product.title || "Unknown Product",
           description:
             product.description || product.body_html || "No description",

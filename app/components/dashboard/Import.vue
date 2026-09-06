@@ -10,6 +10,7 @@ defineProps<{
 }>();
 
 const toast = useToast();
+const { project } = useProjects();
 
 interface SearchHit {
   name: string;
@@ -446,7 +447,12 @@ async function handleImport() {
   isSubmitting.value = true;
   await $fetch("/api/orders/bulk", {
     method: "POST",
-    body: { orders: importedOrders.value },
+    body: {
+      orders: importedOrders.value.map(order => ({
+        ...order,
+        projectId: project.value?.id
+      }))
+    },
   });
 
   if (importedOrders.value.length > 0) {

@@ -93,6 +93,8 @@ export function useAuth() {
     loggedIn: computed(() => !!session.value),
     signIn: client.signIn,
     signUp: client.signUp,
+    requestPasswordReset: client.requestPasswordReset,
+    resetPassword: client.resetPassword,
     async signOut({ redirectTo }: { redirectTo?: RouteLocationRaw } = {}) {
       const { clearState } = useOrgs()
       if (!user.value) {

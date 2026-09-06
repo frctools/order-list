@@ -14,6 +14,13 @@
           class="text-primary font-medium"
         >Sign up</ULink>.
       </template>
+
+      <template #footer>
+        <ULink
+          to="/auth/forgot-password"
+          class="text-primary font-medium"
+        >Forgot your password?</ULink>
+      </template>
     </UAuthForm>
   </div>
 </template>
