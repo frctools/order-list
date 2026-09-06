@@ -20,7 +20,11 @@ const searchTerm = useRouteQuery<string>("q", "");
 const debouncedSearch = refDebounced(searchTerm, 300);
 const auth = useAuth();
 const orgs = useOrgs();
+const projects = useProjects();
 const toast = useToast();
+const selectedProducts = ref<SearchResultItem[]>([]);
+const isOrderModalOpen = ref(false);
+const isAddingSelected = ref(false);
 const selectedVendors = useRouteQuery<string[]>("vendors", []);
 const sortBy = useRouteQuery<"relevance" | "price-asc" | "price-desc">(
   "sort",
@@ -145,6 +149,126 @@ const canCreateKit = computed(
   () => Boolean(auth.session.value && orgs.organization.value),
 );
 
+const allVisibleProductsSelected = computed(
+  () =>
+    searchResults.value.length > 0 &&
+    searchResults.value.every((item) => isProductSelected(item.id)),
+);
+
+function isProductSelected(id: string) {
+  return selectedProducts.value.some((item) => item.id === id);
+}
+
+function setProductSelected(item: SearchResultItem, selected: boolean) {
+  if (selected && !isProductSelected(item.id)) {
+    selectedProducts.value = [...selectedProducts.value, item];
+  } else if (!selected) {
+    selectedProducts.value = selectedProducts.value.filter(
+      (selectedItem) => selectedItem.id !== item.id,
+    );
+  }
+}
+
+function setAllVisibleProductsSelected(selected: boolean) {
+  const visibleIds = new Set(searchResults.value.map((item) => item.id));
+
+  if (!selected) {
+    selectedProducts.value = selectedProducts.value.filter(
+      (item) => !visibleIds.has(item.id),
+    );
+    return;
+  }
+
+  const selectedIds = new Set(selectedProducts.value.map((item) => item.id));
+  selectedProducts.value = [
+    ...selectedProducts.value,
+    ...searchResults.value.filter((item) => !selectedIds.has(item.id)),
+  ];
+}
+
+async function openAddSelectedFlow() {
+  if (selectedProducts.value.length === 0) return;
+
+  if (!canCreateKit.value) {
+    toast.add({
+      title: "Log in to add orders",
+      description: "Orders are saved to a project in your active organization.",
+      color: "warning",
+      icon: "i-lucide-log-in",
+    });
+    await navigateTo("/auth/login");
+    return;
+  }
+
+  try {
+    await projects.fetchProjects();
+    isOrderModalOpen.value = true;
+  } catch (error) {
+    toast.add({
+      title: "Unable to load projects",
+      description: error instanceof Error ? error.message : "Please try again.",
+      color: "error",
+      icon: "i-lucide-alert-triangle",
+    });
+  }
+}
+
+async function addSelectedToOrders() {
+  if (selectedProducts.value.length === 0) return;
+
+  const projectId = projects.project.value?.id;
+  if (!projectId) {
+    toast.add({
+      title: "Select a project",
+      description: "Choose or create a project for these orders.",
+      color: "warning",
+      icon: "i-lucide-folder-kanban",
+    });
+    return;
+  }
+
+  isAddingSelected.value = true;
+  try {
+    const response = await $fetch<{ orders: unknown[] }>("/api/orders/bulk", {
+      method: "POST",
+      body: {
+        orders: selectedProducts.value.map((item) => ({
+          projectId,
+          partName: item.title,
+          description: item.description || undefined,
+          quantity: 1,
+          vendorId: item.vendorId || item.vendorName || null,
+          unitPriceCents:
+            Number.isFinite(item.price) && item.price >= 0
+              ? Math.round(item.price * 100)
+              : undefined,
+          externalUrl: item.originalUrl || undefined,
+          tagIds: [],
+        })),
+      },
+    });
+
+    toast.add({
+      title: "Products added to orders",
+      description: `${response.orders.length} order${response.orders.length === 1 ? "" : "s"} created in ${projects.project.value?.name}.`,
+      color: "success",
+      icon: "i-lucide-check-circle",
+    });
+    selectedProducts.value = [];
+    isOrderModalOpen.value = false;
+    await navigateTo("/app");
+  } catch (error) {
+    toast.add({
+      title: "Unable to add selected products",
+      description: error instanceof Error ? error.message : "Please try again.",
+      color: "error",
+      icon: "i-lucide-alert-triangle",
+    });
+  } finally {
+    isAddingSelected.value = false;
+  }
+}
+
 async function goToCreateKitPage() {
   if (!canCreateKit.value) {
     toast.add({
@@ -177,6 +301,36 @@ async function goToCreateKitPage() {
           class="w-full"
           :loading="status === 'pending'"
         />
+      </div>
+
+      <div
+        v-if="selectedProducts.length > 0"
+        class="sticky top-2 z-20 mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-default bg-default/90 p-3 shadow-sm backdrop-blur"
+      >
+        <UBadge color="primary" variant="soft">
+          {{ selectedProducts.length }} selected
+        </UBadge>
+        <UCheckbox
+          :model-value="allVisibleProductsSelected"
+          label="Select all visible"
+          @update:model-value="setAllVisibleProductsSelected(Boolean($event))"
+        />
+        <div class="ml-auto flex gap-2">
+          <UButton
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-x"
+            @click="selectedProducts = []"
+          >
+            Clear
+          </UButton>
+          <UButton
+            icon="i-lucide-shopping-cart"
+            @click="openAddSelectedFlow"
+          >
+            Add selected to orders
+          </UButton>
+        </div>
       </div>
 
       <div class="flex flex-col sm:flex-row gap-4 mb-6">
@@ -286,7 +440,15 @@ async function goToCreateKitPage() {
           v-for="item in searchResults"
           :key="item.id"
           class="flex flex-col"
+          :class="isProductSelected(item.id) ? 'ring-2 ring-primary' : ''"
         >
+          <div class="mb-2 flex justify-end">
+            <UCheckbox
+              :model-value="isProductSelected(item.id)"
+              :aria-label="`Select ${item.title}`"
+              @update:model-value="setProductSelected(item, Boolean($event))"
+            />
+          </div>
           <NuxtLink
             :to="getProductUrl(item)"
             class="aspect-square bg-elevated rounded-lg mb-3 overflow-hidden"
@@ -367,7 +529,14 @@ async function goToCreateKitPage() {
           v-for="item in searchResults"
           :key="item.id"
           class="flex gap-4"
+          :class="isProductSelected(item.id) ? 'ring-2 ring-primary' : ''"
         >
+          <UCheckbox
+            class="shrink-0 self-center"
+            :model-value="isProductSelected(item.id)"
+            :aria-label="`Select ${item.title}`"
+            @update:model-value="setProductSelected(item, Boolean($event))"
+          />
           <div
             class="w-20 h-20 bg-elevated rounded-lg shrink-0 overflow-hidden"
           >
@@ -442,6 +611,43 @@ async function goToCreateKitPage() {
         </UPageCard>
       </div>
 
+      <ClientOnly>
+        <UModal
+          v-model:open="isOrderModalOpen"
+          title="Add selected products to orders"
+          :description="`${selectedProducts.length} product${selectedProducts.length === 1 ? '' : 's'} will be added as new orders.`"
+        >
+          <template #body>
+            <div class="space-y-5">
+              <div class="space-y-2">
+                <p class="text-sm font-medium">Destination project</p>
+                <ProjectSwitcher />
+                <p class="text-xs text-muted">
+                  Each selected product will be created with a quantity of one.
+                </p>
+              </div>
+              <div class="flex justify-end gap-2">
+                <UButton
+                  color="neutral"
+                  variant="ghost"
+                  :disabled="isAddingSelected"
+                  @click="isOrderModalOpen = false"
+                >
+                  Cancel
+                </UButton>
+                <UButton
+                  icon="i-lucide-shopping-cart"
+                  :loading="isAddingSelected"
+                  :disabled="!projects.project.value"
+                  @click="addSelectedToOrders"
+                >
+                  Add {{ selectedProducts.length }} to orders
+                </UButton>
+              </div>
+            </div>
+          </template>
+        </UModal>
+      </ClientOnly>
     </UContainer>
   </div>
 </template>

@@ -142,6 +142,15 @@ async function copyShareLink(shareId: string) {
               >
                 Edit
               </UButton>
+              <UButton
+                size="sm"
+                variant="ghost"
+                color="neutral"
+                icon="i-lucide-copy-plus"
+                :to="{ path: '/app/kits/new', query: { from: kit.shareId } }"
+              >
+                Start new kit
+              </UButton>
             </div>
           </div>
         </UPageCard>

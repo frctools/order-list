@@ -7,8 +7,31 @@ definePageMeta({
 
 const toast = useToast();
 const router = useRouter();
+const route = useRoute();
 
 const isSaving = ref(false);
+const sourceKit = ref<SharedKit | null>(null);
+const sourceError = ref<Error | null>(null);
+
+const sourceShareId = Array.isArray(route.query.from)
+  ? route.query.from[0]
+  : route.query.from;
+
+if (sourceShareId) {
+  try {
+    const response = await $fetch<{ kit: SharedKit }>(
+      `/api/kits/${encodeURIComponent(sourceShareId)}`,
+    );
+    sourceKit.value = response.kit;
+  } catch (error) {
+    sourceError.value =
+      error instanceof Error ? error : new Error("Unable to load the source kit.");
+  }
+}
+
+const initialTitle = computed(() =>
+  sourceKit.value ? `Copy of ${sourceKit.value.title}`.slice(0, 120) : undefined,
+);
 
 type CreateKitResponse = {
   kit: SharedKit;
@@ -50,10 +73,16 @@ async function createKit(payload: SaveKitInput) {
       <header class="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 class="text-3xl font-semibold tracking-tight text-primary-900 dark:text-primary-100">
-            Create kit
+            {{ sourceKit ? "Create from kit" : "Create kit" }}
           </h1>
           <p class="text-sm text-gray-500">
-            Build a shareable group of parts from search results or custom items.
+            <template v-if="sourceKit">
+              Starting with the items from {{ sourceKit.title }}. Your changes
+              won’t affect the original kit.
+            </template>
+            <template v-else>
+              Build a shareable group of parts from search results or custom items.
+            </template>
           </p>
         </div>
 
@@ -67,9 +96,21 @@ async function createKit(payload: SaveKitInput) {
         </UButton>
       </header>
 
+      <UAlert
+        v-if="sourceError"
+        color="warning"
+        variant="soft"
+        icon="i-lucide-alert-triangle"
+        title="Unable to load the source kit"
+        description="You can still create a new kit from scratch."
+      />
+
       <KitEditorForm
         mode="create"
         :loading="isSaving"
+        :initial-title="initialTitle"
+        :initial-description="sourceKit?.description"
+        :initial-items="sourceKit?.items"
         @submit="createKit"
       />
     </UContainer>

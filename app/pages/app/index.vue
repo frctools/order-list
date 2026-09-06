@@ -60,7 +60,7 @@
       />
 
       <div
-        class="sticky top-2 z-20 rounded-2xl border border-default bg-default/90 p-3 shadow-sm backdrop-blur"
+        class="sticky top-2 z-20 rounded-2xl border border-default bg-default/90 p-3 backdrop-blur"
       >
         <div class="flex flex-wrap items-center gap-2">
           <UInput
@@ -118,7 +118,7 @@
 
         <div
           v-else
-          class="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-3 lg:mx-0 lg:grid lg:grid-cols-3 lg:overflow-visible lg:px-0"
+          class="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-none px-4 pb-3 lg:mx-0 lg:grid lg:grid-cols-3 lg:overflow-visible lg:px-0"
         >
           <section
             v-for="column in boardColumns"
@@ -140,7 +140,7 @@
             </div>
 
             <div
-              class="h-[calc(100dvh-18rem)] min-h-96 flex-1 space-y-3 overflow-y-auto overscroll-contain rounded-xl border border-dashed border-gray-300/60 bg-white/80 p-3 transition-all dark:bg-gray-950/60"
+              class="h-[calc(100dvh-18rem)] min-h-96 flex-1 space-y-2 overflow-y-auto overscroll-none rounded-xl border border-dashed border-gray-300/60 bg-white/80 p-2 transition-all dark:bg-gray-950/60"
               :class="
                 dropTarget === column.key
                   ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-transparent'
@@ -160,21 +160,22 @@
               <UCard
                 v-for="order in column.items"
                 :key="order.id"
-                class="cursor-grab shadow-sm active:cursor-grabbing"
-                :ui="{ header: 'p-3 sm:p-3', body: 'p-3 sm:p-3', footer: 'p-2 sm:p-2' }"
+                class="cursor-grab shadow-xs active:cursor-grabbing"
+                :ui="{ header: 'px-3 py-2 sm:px-3 sm:py-2', body: 'px-3 py-2 sm:px-3 sm:py-2', footer: 'px-2 py-1.5 sm:px-2 sm:py-1.5' }"
                 :draggable="!isOrderUpdating(order.id)"
                 @dragstart="onDragStart(order.id)"
                 @dragend="onDragEnd"
               >
                 <template #header>
                   <div class="flex items-start justify-between gap-2">
-                    <div>
+                    <div class="min-w-0">
                       <p
-                        class="text-sm font-semibold leading-tight text-gray-900 dark:text-white"
+                        class="truncate text-sm font-semibold leading-tight text-gray-900 dark:text-white"
+                        :title="order.partName"
                       >
                         {{ order.partName }}
                       </p>
-                      <p class="text-xs text-gray-500">
+                      <p class="mt-0.5 truncate text-[11px] leading-tight text-gray-500">
                         Requested by
                         {{ order.requestedByName ?? "unknown user" }}
                       </p>
@@ -185,30 +186,30 @@
                   </div>
                 </template>
 
-                <div class="space-y-3">
+                <div class="space-y-2">
                   <p
                     v-if="order.description"
-                    class="line-clamp-2 text-sm text-gray-500 dark:text-gray-300"
+                    class="line-clamp-2 text-xs leading-snug text-gray-500 dark:text-gray-300"
                   >
                     {{ order.description }}
                   </p>
 
-                  <div class="grid gap-2 text-xs text-gray-500">
+                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] leading-tight text-gray-500">
                     <div
                       v-if="order.unitPriceCents !== null"
-                      class="flex items-center gap-2"
+                      class="flex items-center gap-1"
                     >
-                      <UIcon name="i-lucide-banknote" class="text-sm" />
+                      <UIcon name="i-lucide-banknote" class="size-3" />
                       <span>{{
                         formatCurrencyFromCents(order.unitPriceCents)
                       }}</span>
                     </div>
                     <div
                       v-if="order.variantTitle || order.variantId"
-                      class="flex items-center gap-2"
+                      class="flex min-w-0 items-center gap-1"
                     >
-                      <UIcon name="i-lucide-tags" class="text-sm" />
-                      <span>
+                      <UIcon name="i-lucide-tags" class="size-3 shrink-0" />
+                      <span class="max-w-40 truncate">
                         {{ order.variantTitle ?? order.variantId }}
                         <span
                           v-if="order.variantTitle && order.variantId"
@@ -220,22 +221,22 @@
                     </div>
                     <div
                       v-if="order.vendorName"
-                      class="flex items-center gap-2"
+                      class="flex min-w-0 items-center gap-1"
                     >
-                      <UIcon name="i-lucide-store" class="text-sm" />
-                      <span>{{ order.vendorName }}</span>
+                      <UIcon name="i-lucide-store" class="size-3 shrink-0" />
+                      <span class="max-w-36 truncate">{{ order.vendorName }}</span>
                     </div>
 
-                    <div v-if="order.orderedAt" class="flex items-center gap-2">
-                      <UIcon name="i-lucide-calendar-check" class="text-sm" />
+                    <div v-if="order.orderedAt" class="flex items-center gap-1">
+                      <UIcon name="i-lucide-calendar-check" class="size-3" />
                       <span>Ordered {{ formatDate(order.orderedAt) }}</span>
                     </div>
-                    <div v-if="order.arrivedAt" class="flex items-center gap-2">
-                      <UIcon name="i-lucide-package-check" class="text-sm" />
+                    <div v-if="order.arrivedAt" class="flex items-center gap-1">
+                      <UIcon name="i-lucide-package-check" class="size-3" />
                       <span>Arrived {{ formatDate(order.arrivedAt) }}</span>
                     </div>
-                    <div class="flex items-center gap-2">
-                      <UIcon name="i-lucide-clock-8" class="text-sm" />
+                    <div class="flex items-center gap-1">
+                      <UIcon name="i-lucide-clock-8" class="size-3" />
                       <span
                         >Updated
                         {{ formatDate(order.updatedAt) ?? "just now" }}</span
@@ -245,7 +246,7 @@
 
                   <div
                     v-if="order.tags && order.tags.length > 0"
-                    class="mt-3 flex flex-wrap gap-1"
+                    class="flex flex-wrap gap-1"
                   >
                     <UBadge
                       v-for="tag in order.tags"
@@ -263,7 +264,7 @@
                 </div>
 
                 <template #footer>
-                  <div class="flex flex-wrap justify-end gap-2">
+                  <div class="flex items-center justify-end gap-1">
                     <UButton
                       v-if="order.externalUrl"
                       size="xs"
@@ -286,26 +287,28 @@
                     >
                       Advance
                     </UButton>
-                    <UButton
-                      size="xs"
-                      variant="soft"
-                      color="neutral"
-                      icon="i-lucide-pencil"
-                      :loading="isOrderUpdating(order.id)"
-                      @click="openEditEditor(order)"
-                    >
-                      Edit
-                    </UButton>
-                    <UButton
-                      size="xs"
-                      variant="soft"
-                      color="error"
-                      icon="i-lucide-trash-2"
-                      :loading="isOrderDeleting(order.id)"
-                      @click="deleteOrder(order)"
-                    >
-                      Remove
-                    </UButton>
+                    <UTooltip text="Edit order">
+                      <UButton
+                        size="xs"
+                        variant="ghost"
+                        color="neutral"
+                        icon="i-lucide-pencil"
+                        aria-label="Edit order"
+                        :loading="isOrderUpdating(order.id)"
+                        @click="openEditEditor(order)"
+                      />
+                    </UTooltip>
+                    <UTooltip text="Remove order">
+                      <UButton
+                        size="xs"
+                        variant="ghost"
+                        color="error"
+                        icon="i-lucide-trash-2"
+                        aria-label="Remove order"
+                        :loading="isOrderDeleting(order.id)"
+                        @click="deleteOrder(order)"
+                      />
+                    </UTooltip>
                   </div>
                 </template>
               </UCard>
@@ -315,25 +318,25 @@
       </div>
 
       <div v-else class="overflow-hidden">
-        <div class="mb-4 grid gap-4 md:grid-cols-2">
-          <div class="space-y-2">
+        <div class="mb-3 flex flex-wrap gap-3">
+          <div class="w-44">
             <UFormField label="Start date">
               <UInput
                 v-model="startDate"
                 type="date"
                 class="w-full"
-                size="xl"
+                size="sm"
               />
             </UFormField>
           </div>
-          <div class="space-y-2">
+          <div class="w-44">
             <UFormField label="End date">
-              <UInput v-model="endDate" type="date" class="w-full" size="xl" />
+              <UInput v-model="endDate" type="date" class="w-full" size="sm" />
             </UFormField>
           </div>
         </div>
 
-        <div class="mb-6 flex items-center justify-between gap-4">
+        <div class="mb-4 flex items-end justify-between gap-4">
           <div>
             <h2 class="text-lg font-medium text-gray-900 dark:text-white">
               Total
@@ -352,6 +355,19 @@
           </div>
 
           <div class="flex gap-2">
+            <UDropdownMenu
+              :items="columnMenuItems"
+              :content="{ align: 'end' }"
+            >
+              <UButton
+                variant="soft"
+                color="neutral"
+                icon="i-lucide-columns-3"
+                trailing-icon="i-lucide-chevron-down"
+              >
+                Columns
+              </UButton>
+            </UDropdownMenu>
             <UButton
               variant="soft"
               color="neutral"
@@ -360,7 +376,7 @@
               :loading="isExportingCsv"
               @click="exportOrdersCsv"
             >
-              Export CSV
+              {{ selectedFilteredTableRows.length ? `Export ${selectedFilteredTableRows.length} selected` : 'Export CSV' }}
             </UButton>
             <UButton variant="ghost" color="neutral" @click="clearFilters">
               Clear
@@ -370,31 +386,51 @@
         <div v-if="isPending && ordersState.length === 0" class="space-y-2">
           <USkeleton v-for="row in 6" :key="row" class="h-12 rounded-lg" />
         </div>
-        <div v-else class="max-h-[70dvh] overflow-auto rounded-xl border border-default">
-          <UTable
-            :columns="orderTableColumns"
-            :data="filteredTableRows"
-            :loading="isPending"
-            sticky
-            class="w-full"
-          >
+        <div v-else class="w-full overflow-hidden rounded-xl border border-default bg-default">
+          <div class="max-h-[70dvh] overflow-auto overscroll-none">
+            <UTable
+              v-model:sorting="sorting"
+              v-model:column-visibility="columnVisibility"
+              v-model:column-pinning="columnPinning"
+              v-model:row-selection="rowSelection"
+              v-model:pagination="pagination"
+              :columns="orderTableColumns"
+              :data="filteredTableRows"
+              :loading="isPending"
+              :get-row-id="getOrderRowId"
+              :pagination-options="{
+                getPaginationRowModel: getPaginationRowModel(),
+              }"
+              :ui="{
+                root: 'overflow-visible overscroll-none',
+                base: 'min-w-full w-max',
+                thead: 'bg-elevated',
+                tr: 'group',
+                th: 'h-8 bg-elevated px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap',
+                td: 'px-2 py-1.5 text-xs whitespace-nowrap',
+              }"
+              sticky
+              class="w-full"
+            >
           <template #partName-cell="{ row }">
-            <div class="flex flex-col">
+            <div class="flex max-w-52 flex-col py-0.5">
               <span
-                class="text-sm font-semibold text-gray-900 dark:text-white max-w-48 text-wrap"
+                class="truncate text-xs font-semibold text-gray-900 dark:text-white"
+                :title="row.original.partName"
               >
                 {{ row.getValue("partName") }}
               </span>
               <span
                 v-if="row.original.description"
-                class="text-xs text-gray-500 max-w-48 text-wrap line-clamp-3"
+                class="max-w-52 truncate text-[11px] leading-tight text-gray-500"
+                :title="row.original.description"
               >
                 {{ row.original.description }}
               </span>
             </div>
           </template>
           <template #tags-cell="{ row }">
-            <div class="flex flex-wrap gap-1">
+            <div class="flex max-w-36 gap-1 overflow-hidden">
               <UBadge
                 v-for="tag in row.original.tags"
                 :key="tag.id"
@@ -451,15 +487,26 @@
           </template>
 
           <template #updatedAt-cell="{ row }">
-            {{ formatDate(row.getValue("updatedAt")) ?? "--" }}
+            {{ formatTableDate(row.getValue("updatedAt")) ?? "--" }}
           </template>
 
           <template #actions-cell="{ row }">
-            <div class="flex justify-end gap-2">
+            <div class="flex justify-end gap-1">
+              <UButton
+                v-if="row.original.externalUrl"
+                size="xs"
+                variant="soft"
+                color="neutral"
+                icon="i-lucide-shopping-cart"
+                :to="row.original.externalUrl"
+                target="_blank"
+              >
+                Order
+              </UButton>
               <UButton
                 v-if="getNextStatus(row.getValue('status'))"
                 size="xs"
-                variant="ghost"
+                variant="soft"
                 color="primary"
                 icon="i-lucide-chevrons-right"
                 :loading="isOrderUpdating(row.id)"
@@ -467,29 +514,87 @@
               >
                 Advance
               </UButton>
-              <UButton
-                size="xs"
-                variant="ghost"
-                color="neutral"
-                icon="i-lucide-pencil"
-                :loading="isOrderUpdating(row.id)"
-                @click="openEditEditor(row.original)"
-              >
-                Edit
-              </UButton>
-              <UButton
-                size="xs"
-                variant="ghost"
-                color="error"
-                icon="i-lucide-trash-2"
-                :loading="isOrderDeleting(row.original.id)"
-                @click="deleteOrder(row.original)"
-              >
-                Remove
-              </UButton>
+              <UTooltip text="Edit order">
+                <UButton
+                  size="xs"
+                  variant="ghost"
+                  color="neutral"
+                  icon="i-lucide-pencil"
+                  aria-label="Edit order"
+                  :loading="isOrderUpdating(row.id)"
+                  @click="openEditEditor(row.original)"
+                />
+              </UTooltip>
+              <UTooltip text="Remove order">
+                <UButton
+                  size="xs"
+                  variant="ghost"
+                  color="error"
+                  icon="i-lucide-trash-2"
+                  aria-label="Remove order"
+                  :loading="isOrderDeleting(row.original.id)"
+                  @click="deleteOrder(row.original)"
+                />
+              </UTooltip>
             </div>
           </template>
-          </UTable>
+            </UTable>
+          </div>
+
+          <div
+            class="flex flex-wrap items-center justify-between gap-3 border-t border-default px-3 py-2"
+          >
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-xs text-muted">
+                {{ pageRangeLabel }}
+              </span>
+              <template v-if="selectedFilteredTableRows.length">
+                <UBadge color="primary" variant="soft" size="sm">
+                  {{ selectedFilteredTableRows.length }} selected
+                </UBadge>
+                <UDropdownMenu :items="selectedStatusItems">
+                  <UButton
+                    size="xs"
+                    color="neutral"
+                    variant="soft"
+                    icon="i-lucide-list-checks"
+                    trailing-icon="i-lucide-chevron-down"
+                    :loading="isBulkUpdating"
+                  >
+                    Set status
+                  </UButton>
+                </UDropdownMenu>
+                <UButton
+                  size="xs"
+                  color="neutral"
+                  variant="ghost"
+                  icon="i-lucide-x"
+                  @click="clearRowSelection"
+                >
+                  Clear selection
+                </UButton>
+              </template>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <USelect
+                v-model="pagination.pageSize"
+                :items="pageSizeOptions"
+                value-key="value"
+                size="xs"
+                class="w-32"
+                aria-label="Orders per page"
+              />
+              <UPagination
+                :page="pagination.pageIndex + 1"
+                :items-per-page="pagination.pageSize"
+                :total="filteredTableRows.length"
+                size="xs"
+                :sibling-count="1"
+                @update:page="pagination.pageIndex = $event - 1"
+              />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -524,8 +629,25 @@
 
 <script setup lang="ts">
 import { TinyColor } from "@ctrl/tinycolor";
-import { computed, ref, watch, watchEffect, onMounted } from "vue";
+import {
+  computed,
+  h,
+  onMounted,
+  ref,
+  resolveComponent,
+  watch,
+  watchEffect,
+} from "vue";
 import type { TableColumn } from "#ui/types";
+import { getPaginationRowModel } from "@tanstack/vue-table";
+import type {
+  Column,
+  ColumnPinningState,
+  PaginationState,
+  RowSelectionState,
+  SortingState,
+  VisibilityState,
+} from "@tanstack/vue-table";
 import type {
   Order,
   OrderEditorSubmitPayload,
@@ -623,11 +745,75 @@ type OrderTableRow = Order & {
   vendorKey: string;
 };
 
+const UButton = resolveComponent("UButton");
+const UCheckbox = resolveComponent("UCheckbox");
+
+function sortableHeader(
+  column: Column<OrderTableRow, unknown>,
+  label: string,
+) {
+  const sorted = column.getIsSorted();
+  return h(UButton, {
+    color: "neutral",
+    variant: "link",
+    size: "xs",
+    label,
+    icon: sorted
+      ? sorted === "asc"
+        ? "i-lucide-arrow-up-narrow-wide"
+        : "i-lucide-arrow-down-wide-narrow"
+      : "i-lucide-arrow-up-down",
+    class:
+      "bg-transparent text-[11px] uppercase tracking-wide hover:bg-transparent",
+    onClick: () => column.toggleSorting(sorted === "asc"),
+  });
+}
+
 const orderTableColumns: TableColumn<OrderTableRow>[] = [
-  { accessorKey: "partName", header: "Part" },
+  {
+    id: "select",
+    header: ({ table }) =>
+      h(UCheckbox, {
+        modelValue: table.getIsSomePageRowsSelected()
+          ? "indeterminate"
+          : table.getIsAllPageRowsSelected(),
+        "onUpdate:modelValue": (value: boolean | "indeterminate") =>
+          table.toggleAllPageRowsSelected(Boolean(value)),
+        "aria-label": "Select all orders on this page",
+        size: "xs",
+      }),
+    cell: ({ row }) =>
+      h(UCheckbox, {
+        modelValue: row.getIsSelected(),
+        "onUpdate:modelValue": (value: boolean | "indeterminate") =>
+          row.toggleSelected(Boolean(value)),
+        "aria-label": `Select ${row.original.partName}`,
+        size: "xs",
+      }),
+    enableSorting: false,
+    enableHiding: false,
+    size: 36,
+    meta: {
+      class: {
+        th: "bg-elevated",
+        td: "bg-default group-data-[selected=true]:bg-elevated/50",
+      },
+    },
+  },
+  {
+    accessorKey: "partName",
+    header: ({ column }) => sortableHeader(column, "Part"),
+    size: 208,
+    meta: {
+      class: {
+        th: "bg-elevated",
+        td: "bg-default group-data-[selected=true]:bg-elevated/50",
+      },
+    },
+  },
   {
     accessorKey: "status",
-    header: "Status",
+    header: ({ column }) => sortableHeader(column, "Status"),
     cell: ({ row }) => {
       const status = statusLookup[row.original.status];
       return status ? status.label : row.original.status;
@@ -636,11 +822,20 @@ const orderTableColumns: TableColumn<OrderTableRow>[] = [
   {
     accessorKey: "tags",
     header: "Tags",
+    enableSorting: false,
   },
-  { accessorKey: "quantity", header: "Qty" },
-  { accessorKey: "unitPriceCents", header: "Unit price" },
   {
-    header: "Total price",
+    accessorKey: "quantity",
+    header: ({ column }) => sortableHeader(column, "Qty"),
+  },
+  {
+    accessorKey: "unitPriceCents",
+    header: ({ column }) => sortableHeader(column, "Unit price"),
+  },
+  {
+    id: "totalPriceCents",
+    accessorFn: (row) => (row.quantity ?? 0) * (row.unitPriceCents ?? 0),
+    header: ({ column }) => sortableHeader(column, "Total price"),
     cell: ({ row }) => {
       const qty = row.original.quantity ?? 0;
       const unitCents = row.original.unitPriceCents ?? 0;
@@ -648,11 +843,83 @@ const orderTableColumns: TableColumn<OrderTableRow>[] = [
       return totalCents > 0 ? formatCurrencyFromCents(totalCents) : "--";
     },
   },
-  { accessorKey: "vendorName", header: "Vendor" },
-  { accessorKey: "requestedByName", header: "Requested by" },
-  { accessorKey: "updatedAt", header: "Updated" },
-  { accessorKey: "actions", header: "" },
+  {
+    accessorKey: "vendorName",
+    header: ({ column }) => sortableHeader(column, "Vendor"),
+  },
+  {
+    accessorKey: "requestedByName",
+    header: ({ column }) => sortableHeader(column, "Requested by"),
+  },
+  {
+    accessorKey: "updatedAt",
+    header: ({ column }) => sortableHeader(column, "Updated"),
+  },
+  {
+    accessorKey: "actions",
+    header: "",
+    enableSorting: false,
+    enableHiding: false,
+    size: 260,
+    meta: {
+      class: {
+        th: "bg-elevated",
+        td: "bg-default group-data-[selected=true]:bg-elevated/50",
+      },
+    },
+  },
 ];
+
+const orderColumnLabels: Record<string, string> = {
+  partName: "Part",
+  status: "Status",
+  tags: "Tags",
+  quantity: "Quantity",
+  unitPriceCents: "Unit price",
+  totalPriceCents: "Total price",
+  vendorName: "Vendor",
+  requestedByName: "Requested by",
+  updatedAt: "Updated",
+};
+
+const sorting = ref<SortingState>([{ id: "updatedAt", desc: true }]);
+const columnVisibility = ref<VisibilityState>({});
+const columnPinning = ref<ColumnPinningState>({
+  left: ["select", "partName"],
+  right: ["actions"],
+});
+const rowSelection = ref<RowSelectionState>({});
+const pagination = ref<PaginationState>({
+  pageIndex: 0,
+  pageSize: 50,
+});
+
+const columnMenuItems = computed(
+  () =>
+    Object.entries(orderColumnLabels).map(([id, label]) => ({
+        label,
+        type: "checkbox" as const,
+        checked: columnVisibility.value[id] !== false,
+        onUpdateChecked(checked: boolean) {
+          columnVisibility.value = {
+            ...columnVisibility.value,
+            [id]: checked,
+          };
+        },
+        onSelect(event: Event) {
+          event.preventDefault();
+        },
+      })),
+);
+
+function getOrderRowId(row: OrderTableRow) {
+  return row.id;
+}
+
+const pageSizeOptions = [10, 25, 50, 100].map((value) => ({
+  label: `${value} per page`,
+  value,
+}));
 
 type CsvColumn = {
   label: string;
@@ -717,6 +984,14 @@ watch(
     }
   },
   { immediate: true },
+);
+
+const tableRows = computed<OrderTableRow[]>(() =>
+  ordersState.value.map((order) => ({
+    ...order,
+    actions: order.id,
+    vendorKey: vendorKeyForOrder(order),
+  })),
 );
 
 const startDate = ref<string | undefined>(undefined);
@@ -798,6 +1073,74 @@ const totalSpentCents = computed(() => {
 
 const filteredCount = computed(() => filteredTableRows.value.length);
 
+const selectedFilteredTableRows = computed(() =>
+  filteredTableRows.value.filter((row) => rowSelection.value[row.id]),
+);
+
+const isBulkUpdating = ref(false);
+
+const selectedStatusItems = computed(() =>
+  statuses.map((status) => ({
+    label: `Set as ${status.label}`,
+    icon:
+      status.key === "to_order"
+        ? "i-lucide-clipboard-list"
+        : status.key === "ordered"
+          ? "i-lucide-shopping-cart"
+          : "i-lucide-package-check",
+    disabled: selectedFilteredTableRows.value.every(
+      (order) => order.status === status.key,
+    ),
+    onSelect: () => updateSelectedStatus(status.key),
+  })),
+);
+
+function clearRowSelection() {
+  rowSelection.value = {};
+}
+
+const pageRangeLabel = computed(() => {
+  if (filteredCount.value === 0) return "No orders";
+  const start = pagination.value.pageIndex * pagination.value.pageSize + 1;
+  const end = Math.min(
+    start + pagination.value.pageSize - 1,
+    filteredCount.value,
+  );
+  return `${start}–${end} of ${filteredCount.value}`;
+});
+
+watch(
+  [
+    searchFilter,
+    vendorFilter,
+    statusFilter,
+    tagFilter,
+    startDate,
+    endDate,
+  ],
+  () => {
+    pagination.value.pageIndex = 0;
+  },
+);
+
+watch(
+  () => pagination.value.pageSize,
+  () => {
+    pagination.value.pageIndex = 0;
+  },
+);
+
+watch(filteredCount, (count) => {
+  const lastPage = Math.max(
+    0,
+    Math.ceil(count / pagination.value.pageSize) - 1,
+  );
+  pagination.value.pageIndex = Math.min(
+    pagination.value.pageIndex,
+    lastPage,
+  );
+});
+
 const isExportingCsv = ref(false);
 
 function clearFilters() {
@@ -828,14 +1171,6 @@ const boardColumns = computed(() =>
     items: filteredTableRows.value.filter(
       (order) => order.status === status.key,
     ),
-  })),
-);
-
-const tableRows = computed<OrderTableRow[]>(() =>
-  ordersState.value.map((order) => ({
-    ...order,
-    actions: order.id,
-    vendorKey: vendorKeyForOrder(order),
   })),
 );
 
@@ -1041,6 +1376,70 @@ async function updateOrderStatus(orderId: string, status: StatusKey) {
   }
 }
 
+async function updateSelectedStatus(status: StatusKey) {
+  const targets = selectedFilteredTableRows.value.filter(
+    (order) => order.status !== status,
+  );
+  if (targets.length === 0 || isBulkUpdating.value) return;
+
+  isBulkUpdating.value = true;
+  for (const order of targets) setUpdating(order.id, true);
+
+  const results: PromiseSettledResult<{ order: Order }>[] = [];
+
+  try {
+    // Keep larger selections from overwhelming the API with simultaneous writes.
+    for (let index = 0; index < targets.length; index += 10) {
+      const batch = targets.slice(index, index + 10);
+      const batchResults = await Promise.allSettled(
+        batch.map((order) =>
+          $fetch<{ order: Order }>(`/api/orders/${order.id}`, {
+            method: "PATCH",
+            body: { status },
+          }),
+        ),
+      );
+      results.push(...batchResults);
+    }
+
+    const failedIds: string[] = [];
+    results.forEach((result, index) => {
+      if (result.status === "fulfilled") {
+        upsertOrder(result.value.order);
+      } else {
+        const failedOrder = targets[index];
+        if (failedOrder) failedIds.push(failedOrder.id);
+      }
+    });
+
+    rowSelection.value = Object.fromEntries(
+      failedIds.map((id) => [id, true]),
+    );
+
+    const updatedCount = targets.length - failedIds.length;
+    if (updatedCount > 0) {
+      toast.add({
+        title: `${updatedCount} order${updatedCount === 1 ? "" : "s"} updated`,
+        description: `Status set to ${statusLookup[status].label}`,
+        color: "success",
+        icon: "i-lucide-check-circle",
+      });
+    }
+
+    if (failedIds.length > 0) {
+      toast.add({
+        title: `${failedIds.length} order${failedIds.length === 1 ? "" : "s"} could not be updated`,
+        description: "The failed orders remain selected so you can retry.",
+        color: "error",
+        icon: "i-lucide-alert-triangle",
+      });
+    }
+  } finally {
+    for (const order of targets) setUpdating(order.id, false);
+    isBulkUpdating.value = false;
+  }
+}
+
 function getNextStatus(status: StatusKey): StatusKey | null {
   const index = statusSequence.indexOf(status);
   if (index === -1) return null;
@@ -1086,6 +1485,9 @@ async function deleteOrder(order: Pick<Order, "id">) {
     await $fetch(`/api/orders/${order.id}`, { method: "DELETE" });
     ordersState.value = ordersState.value.filter(
       (item) => item.id !== order.id,
+    );
+    rowSelection.value = Object.fromEntries(
+      Object.entries(rowSelection.value).filter(([id]) => id !== order.id),
     );
     toast.add({
       title: "Order removed",
@@ -1141,12 +1543,15 @@ function buildCsvContent(rows: OrderTableRow[]) {
 }
 
 async function exportOrdersCsv() {
-  if (filteredTableRows.value.length === 0) return;
+  const rows = selectedFilteredTableRows.value.length
+    ? selectedFilteredTableRows.value
+    : filteredTableRows.value;
+  if (rows.length === 0) return;
   if (typeof window === "undefined") return;
 
   isExportingCsv.value = true;
   try {
-    const csvContent = buildCsvContent(filteredTableRows.value);
+    const csvContent = buildCsvContent(rows);
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -1159,7 +1564,7 @@ async function exportOrdersCsv() {
     URL.revokeObjectURL(url);
     toast.add({
       title: "Export ready",
-      description: `${filteredTableRows.value.length} orders downloaded`,
+      description: `${rows.length} orders downloaded`,
       color: "success",
       icon: "i-lucide-download",
     });
@@ -1181,6 +1586,17 @@ function formatDate(value: string | null | undefined) {
     return new Intl.DateTimeFormat(undefined, {
       dateStyle: "medium",
       timeStyle: "short",
+    }).format(new Date(value));
+  } catch {
+    return null;
+  }
+}
+
+function formatTableDate(value: string | null | undefined) {
+  if (!value) return null;
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
     }).format(new Date(value));
   } catch {
     return null;

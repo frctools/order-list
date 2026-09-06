@@ -75,6 +75,15 @@ async function saveKit(payload: SaveKitInput) {
             Open shared page
           </UButton>
           <UButton
+            v-if="kit"
+            variant="soft"
+            color="neutral"
+            icon="i-lucide-copy-plus"
+            :to="{ path: '/app/kits/new', query: { from: kit.shareId } }"
+          >
+            Start new kit
+          </UButton>
+          <UButton
             variant="ghost"
             color="neutral"
             icon="i-lucide-arrow-left"
