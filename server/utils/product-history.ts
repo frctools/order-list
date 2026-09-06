@@ -1,5 +1,6 @@
 import { useDB } from './db'
 import { productCache, productSnapshots } from './schema'
+import { getShopifyProductHandle } from './vendor-providers'
 
 type ProductRecord = Record<string, unknown>
 
@@ -119,13 +120,15 @@ export function normalizeProduct(product: unknown) {
   }
 }
 
-export function generateProductId(url: URL, vendorType?: string | null) {
+export function generateProductId(
+  url: URL,
+  vendorType?: string | null,
+  vendorHostname?: string
+) {
   if (vendorType === 'shopify') {
-    const parts = url.pathname.split('/').filter(Boolean)
-    const productIndex = parts.indexOf('products')
-    const handle = parts[productIndex + 1]
-    if (productIndex !== -1 && handle) {
-      return `${url.hostname}:${handle}`
+    const handle = getShopifyProductHandle(url)
+    if (handle) {
+      return `${vendorHostname ?? url.hostname}:${handle}`
     }
   }
 

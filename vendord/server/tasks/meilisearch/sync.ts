@@ -2,6 +2,7 @@ import { defineTask } from "nitropack/runtime";
 import { MeiliSearch, MeiliSearchApiError } from "meilisearch";
 import { useDB } from "../../../../server/utils/db";
 import { productCache, vendors } from "../../../../server/utils/schema";
+import { getProductUrl } from "../../../../server/utils/vendor-providers";
 
 interface ProductDocument {
   id: string;
@@ -104,7 +105,7 @@ export default defineTask({
           originalUrl:
             product.url || product.handle
               ? vendor.type === "shopify"
-                ? `https://${vendor.hostname}/products/${product.handle}`
+                ? getProductUrl(vendor, product.handle)
                 : `https://${vendor.hostname}/${product.handle}`
               : undefined,
         };

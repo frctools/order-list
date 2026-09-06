@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lte } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, lte } from 'drizzle-orm'
 import { createError, defineEventHandler, getQuery } from 'h3'
 import { z } from 'zod'
 import { useDB } from '../../utils/db'
@@ -7,6 +7,7 @@ import {
   normalizeProduct
 } from '../../utils/product-history'
 import { productCache, productSnapshots, vendors } from '../../utils/schema'
+import { getVendorHostnameCandidates } from '../../utils/vendor-providers'
 
 const historyQuerySchema = z
   .object({
@@ -33,10 +34,15 @@ export default defineEventHandler(async (event) => {
   let productId = parsed.data.productId
   if (!productId && parsed.data.url) {
     const url = new URL(parsed.data.url)
-    const vendor = await db.query.vendors.findFirst({
-      where: eq(vendors.hostname, url.hostname)
+    const vendorHostnames = getVendorHostnameCandidates(url)
+    const matchingVendors = await db.query.vendors.findMany({
+      where: inArray(vendors.hostname, vendorHostnames)
     })
-    productId = generateProductId(url, vendor?.type)
+    const vendor =
+      matchingVendors.find(item => item.hostname === url.hostname)
+      ?? matchingVendors.find(item => item.hostname === vendorHostnames[1])
+      ?? matchingVendors[0]
+    productId = generateProductId(url, vendor?.type, vendor?.hostname)
   }
 
   const filters = [eq(productSnapshots.productId, productId!)]

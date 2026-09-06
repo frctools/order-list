@@ -8,6 +8,7 @@ import {
   fetchBigCommerceProducts,
   bigCommerceToUnified
 } from '../utils/bigcommerce'
+import { getShopifyOrigin } from '../../../server/utils/vendor-providers'
 
 export default defineTask({
   meta: {
@@ -24,7 +25,7 @@ export default defineTask({
       try {
         // perform scraping based on vendor type
         if (vendor.type === 'shopify') {
-          const shopifyStoreUrl = `https://${vendor.hostname}`
+          const shopifyStoreUrl = getShopifyOrigin(vendor)
           // paginate through products
           let page = 1
           let hasMore = true

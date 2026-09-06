@@ -5,7 +5,7 @@ import {
   generateProductId,
   recordProductSnapshot,
 } from "../../../server/utils/product-history";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import parse from "../../../server/utils/set-cookie-parser";
 import { parseHTML } from "linkedom";
 import { createError, eventHandler, getHeaders, getQuery } from "h3";
@@ -15,6 +15,11 @@ import {
   getBigCommerceToken,
   type BigCommerceProduct,
 } from "../utils/bigcommerce";
+import {
+  getShopifyOrigin,
+  getShopifyProductHandle,
+  getVendorHostnameCandidates,
+} from "../../../server/utils/vendor-providers";
 
 const querySchema = z.object({
   url: z.string().trim().min(1, "URL is required").url("Enter a valid URL"),
@@ -35,12 +40,21 @@ export default eventHandler(async (event) => {
   const { url } = parsed.data;
   const urlObj = new URL(url);
   const variantId = urlObj.searchParams.get("variant") ?? null;
-  const vendor = await useDB().query.vendors.findFirst({
-    where: eq(vendors.hostname, urlObj.hostname),
+  const vendorHostnames = getVendorHostnameCandidates(urlObj);
+  const matchingVendors = await useDB().query.vendors.findMany({
+    where: inArray(vendors.hostname, vendorHostnames),
   });
+  const vendor =
+    matchingVendors.find((item) => item.hostname === urlObj.hostname) ??
+    matchingVendors.find((item) => item.hostname === vendorHostnames[1]) ??
+    matchingVendors[0];
 
   // Generate product ID and check cache
-  const productId = generateProductId(urlObj, vendor?.type);
+  const productId = generateProductId(
+    urlObj,
+    vendor?.type,
+    vendor?.hostname,
+  );
   const db = useDB();
 
   const cached = await db.query.productCache.findFirst({
@@ -210,17 +224,12 @@ export default eventHandler(async (event) => {
     };
   }
   if (vendor.type == "shopify") {
-    // strip collections from path
-    const pathParts = urlObj.pathname.split("/").filter(Boolean);
-    const productIndex = pathParts.indexOf("products");
-    pathParts.splice(0, productIndex);
-    const productPath = pathParts.join("/");
-
-    const expectedPrefix = "products/";
-    // pull product.json from shopify
-    if (productPath.startsWith(expectedPrefix)) {
-      const productHandle = productPath.slice(expectedPrefix.length);
-      const productJsonUrl = `${urlObj.origin}/products/${productHandle}.json`;
+    const productHandle = getShopifyProductHandle(urlObj);
+    if (productHandle) {
+      const productJsonUrl = new URL(
+        `/products/${productHandle}.json`,
+        getShopifyOrigin(vendor),
+      );
 
       const res = await fetch(productJsonUrl);
       if (!res.ok) {
