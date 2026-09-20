@@ -61,6 +61,7 @@
     },
   },
   "trustedDependencies": [
+    "better-sqlite3",
     "core-js-pure",
     "unrs-resolver",
     "@sentry/cli",
