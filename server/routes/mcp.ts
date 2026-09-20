@@ -19,7 +19,9 @@ export default defineEventHandler(async (event) => {
         () => createOrderrMcpServer(claims.sub!),
         {
           route: "/mcp",
-          legacy: "reject",
+          // Keep compatibility with stateless clients on the published 2025 MCP
+          // protocol while using the SDK's current 2026 protocol internally.
+          legacy: "stateless",
           allowedHostnames: [new URL(origin).hostname],
         },
       );
