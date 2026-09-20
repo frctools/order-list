@@ -120,6 +120,13 @@
       "when": 1789914889577,
       "tag": "0016_nebulous_juggernaut",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1789916679254,
+      "tag": "0017_remove-account-issuer",
+      "breakpoints": true
     }
   ]
 }
