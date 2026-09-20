@@ -1,6 +1,7 @@
 import { createAuthClient } from 'better-auth/vue'
 import { organizationClient } from 'better-auth/client/plugins'
 import { oauthProviderClient } from '@better-auth/oauth-provider/client'
+import { apiKeyClient } from '@better-auth/api-key/client'
 
 import { defu } from 'defu'
 import type { RouteLocationRaw } from 'vue-router'
@@ -17,7 +18,7 @@ export function useAuth() {
   const requestEvent = import.meta.server ? useRequestEvent() : null
 
   const client = createAuthClient({
-    plugins: [organizationClient(), oauthProviderClient()],
+    plugins: [organizationClient(), oauthProviderClient(), apiKeyClient()],
     baseURL: url.origin,
     fetchOptions: {
       headers

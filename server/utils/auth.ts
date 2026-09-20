@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { useDB } from "./db";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { jwt, organization } from "better-auth/plugins";
+import { apiKey } from "@better-auth/api-key";
 import { mcp } from "@better-auth/mcp";
 import { Resend } from "resend";
 import InviteEmail from "./InviteEmail.vue";
@@ -49,6 +50,19 @@ export const useAuth = () => {
     baseURL: origin,
     plugins: [
       jwt(),
+      apiKey({
+        // Keys are scoped to a team instead of an individual member, so they
+        // remain usable when the person who created one leaves the team.
+        configId: "organization",
+        references: "organization",
+        defaultPrefix: "ordr_",
+        requireName: true,
+        rateLimit: {
+          enabled: true,
+          maxRequests: 1_000,
+          timeWindow: 1000 * 60 * 60 * 24,
+        },
+      }),
       mcp({
         loginPage: "/auth/login",
         consentPage: "/oauth/consent",

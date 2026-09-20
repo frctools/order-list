@@ -32,6 +32,15 @@ and orders:
 - `list_projects`
 - `list_orders`
 
+## API keys
+
+Organization owners can create and revoke API keys from Organization Settings.
+Use a key in the `x-api-key` header with the read-only API:
+
+- `GET /api/v1/projects`
+- `GET /api/v1/tags`
+- `GET /api/v1/orders` (optionally `?projectId=...`)
+
 ## Stack
 
 - [Nuxt 4](https://nuxt.com)

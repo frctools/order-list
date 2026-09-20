@@ -530,6 +530,24 @@
             </UCard>
           </div>
 
+          <div
+            v-else-if="activeTab === 'api-keys'"
+            class="space-y-4"
+          >
+            <ApiKeyManager
+              v-if="canDeleteOrganization"
+              :organization-id="activeOrganization.id"
+            />
+            <UAlert
+              v-else
+              color="neutral"
+              variant="soft"
+              icon="i-lucide-lock-keyhole"
+              title="Owner access required"
+              description="Only organization owners can manage API keys."
+            />
+          </div>
+
           <UCard v-if="canDeleteOrganization">
             <template #header>
               <div class="flex items-center gap-2">
@@ -654,7 +672,7 @@ const { data: invitationsData, status: invitationsStatus, error: invitationsErro
 const invitations = computed(() => invitationsData.value ?? [])
 const invitationsLoading = computed(() => invitationsStatus.value === 'pending')
 
-const activeTab = ref<'members' | 'invitations' | 'tags'>('members')
+const activeTab = ref<'members' | 'invitations' | 'tags' | 'api-keys'>('members')
 
 const updatingMemberIds = ref(new Set<string>())
 const removingMemberIds = ref(new Set<string>())
@@ -711,7 +729,8 @@ const inviteFormState = reactive<InviteForm>({
 const tabItems = [
   { label: 'Members', value: 'members', icon: 'i-lucide-users' },
   { label: 'Invitations', value: 'invitations', icon: 'i-lucide-mail' },
-  { label: 'Tags', value: 'tags', icon: 'i-lucide-tags' }
+  { label: 'Tags', value: 'tags', icon: 'i-lucide-tags' },
+  { label: 'API Keys', value: 'api-keys', icon: 'i-lucide-key-round' }
 ]
 
 const memberTableRows = computed(() =>

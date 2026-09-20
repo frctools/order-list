@@ -11,6 +11,7 @@
     "typecheck": "nuxt typecheck"
   },
   "dependencies": {
+    "@better-auth/api-key": "^1.7.5",
     "@better-auth/mcp": "^1.7.5",
     "@better-auth/oauth-provider": "^1.7.5",
     "@better-auth/stripe": "^1.6.18",
