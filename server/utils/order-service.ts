@@ -10,7 +10,9 @@ export const createOrderSchema = z.object({
   description: z.string().trim().optional(),
   quantity: z.coerce.number().int().min(1).default(1),
   vendorId: z
-    .union([z.string(), z.null(), z.undefined()])
+    .string()
+    .nullable()
+    .optional()
     .transform((value) => {
       if (value === undefined || value === null) return null;
       const trimmed = value.trim();
