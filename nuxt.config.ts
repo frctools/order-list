@@ -119,7 +119,7 @@ export default defineNuxtConfig({
           binding: "CF_VERSION_METADATA",
         },
 
-        compatibility_flags: ["nodejs_compat"],
+        compatibility_flags: ["nodejs_compat", "global_fetch_strictly_public"],
         hyperdrive: [
           {
             binding: "HYPERDRIVE",
