@@ -32,10 +32,6 @@ and orders:
 - `list_projects`
 - `list_orders`
 
-Apply the Drizzle migrations before connecting an MCP client. In production the
-server URL is `https://orders.frctools.com/mcp`; locally it is
-`http://localhost:3000/mcp`.
-
 ## Stack
 
 - [Nuxt 4](https://nuxt.com)
