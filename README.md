@@ -37,6 +37,8 @@ and orders:
 Organization owners can create and revoke API keys from Organization Settings.
 Use a key in the `x-api-key` header with the read-only API:
 
+The interactive API reference is available at `/api/docs`.
+
 - `GET /api/v1/projects`
 - `GET /api/v1/tags`
 - `GET /api/v1/orders` (optionally `?projectId=...`)

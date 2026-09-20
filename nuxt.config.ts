@@ -1,4 +1,5 @@
 import vue from '@vitejs/plugin-vue'
+import openapi from './openapi.json'
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   modules: [
@@ -8,6 +9,7 @@ export default defineNuxtConfig({
     "nitro-cloudflare-dev",
     "@nuxtjs/plausible",
     "@nuxtjs/mdc",
+    "@scalar/nuxt",
     "@sentry/nuxt/module",
     "@vueuse/nuxt",
   ],
@@ -157,6 +159,17 @@ export default defineNuxtConfig({
     // Prevent tracking on localhost
     ignoredHostnames: ["localhost"],
     apiHost: "https://possible.grahamsh.com",
+  },
+
+  scalar: {
+    content: openapi,
+    pathRouting: {
+      // Keep the existing product documentation available at /docs.
+      basePath: "/apidocs"
+    },
+    metaData: {
+      title: "FRCTools Orders API Reference"
+    }
   },
 
   sentry: {
