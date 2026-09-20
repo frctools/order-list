@@ -22,6 +22,20 @@ bun run dev
 bun run build
 ```
 
+## MCP server
+
+The authenticated remote MCP endpoint is available at `/mcp`. It uses Better
+Auth's OAuth 2.1 flow and exposes read-only tools for organizations, projects,
+and orders:
+
+- `list_organizations`
+- `list_projects`
+- `list_orders`
+
+Apply the Drizzle migrations before connecting an MCP client. In production the
+server URL is `https://orders.frctools.com/mcp`; locally it is
+`http://localhost:3000/mcp`.
+
 ## Stack
 
 - [Nuxt 4](https://nuxt.com)

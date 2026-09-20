@@ -1,15 +1,18 @@
 import { betterAuth } from "better-auth";
 import { useDB } from "./db";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { organization } from "better-auth/plugins";
+import { jwt, organization } from "better-auth/plugins";
+import { mcp } from "@better-auth/mcp";
 import { Resend } from "resend";
 import InviteEmail from "./InviteEmail.vue";
 import ResetPasswordEmail from "./ResetPasswordEmail.vue";
 import { render } from "@vue-email/render";
 import * as schema from "./auth-schema";
 
-export const useAuth = () =>
-  betterAuth({
+export const useAuth = () => {
+  const origin = getRequestURL(useEvent()).origin;
+
+  return betterAuth({
     /* logger: {
       level: "debug",
       log: (level, message, ...args) => {
@@ -43,8 +46,17 @@ export const useAuth = () =>
       },
     },
 
-    baseURL: getRequestURL(useEvent()).origin,
+    baseURL: origin,
     plugins: [
+      jwt(),
+      mcp({
+        loginPage: "/auth/login",
+        consentPage: "/oauth/consent",
+        resource: `${origin}/mcp`,
+        scopes: ["openid", "profile", "email", "offline_access", "orders:read"],
+        allowDynamicClientRegistration: true,
+        allowUnauthenticatedClientRegistration: true,
+      }),
       organization({
         async sendInvitationEmail(data) {
           const resend = new Resend(process.env.RESEND_KEY);
@@ -104,3 +116,4 @@ export const useAuth = () =>
     session: {
     },
   });
+};

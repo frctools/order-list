@@ -62,7 +62,9 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
       color: 'success'
     })
     await useAuth().fetchSession()
-    await navigateTo('/app')
+    if (!useRoute().query.oauth_query) {
+      await navigateTo('/app')
+    }
   }
   if (error) {
     toast.add({

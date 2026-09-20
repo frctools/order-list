@@ -70,6 +70,7 @@ export default defineNuxtConfig({
     },
 
     rollupConfig: {
+      // @ts-expect-error Vite 8's plugin type uses Rolldown while Nitro exposes Rollup's type
       plugins: [vue()],
       external: ["pg-native", "canvas"],
     },
