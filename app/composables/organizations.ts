@@ -1,6 +1,7 @@
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { Organization } from 'better-auth/plugins'
 import * as z from 'zod'
+import type { CookieRef } from '#app'
 
 export const createTeamSchema = z.object({
   name: z.string().min(1, 'Team name is required'),
@@ -14,97 +15,136 @@ export const useCurrentOrganization = () => {
   return useState<Organization | null>('organization', () => null)
 }
 
+/**
+ * The persisted org choice. Shared per app instance so every caller sees the
+ * same ref (separate useCookie() refs for the same name can drift apart).
+ */
+export const useActiveOrganizationCookie = () => {
+  const nuxtApp = useNuxtApp() as ReturnType<typeof useNuxtApp> & {
+    _activeOrganizationCookie?: CookieRef<string | null>
+  }
+  nuxtApp._activeOrganizationCookie ??= useCookie<string | null>(
+    'activeOrganizationId',
+    { sameSite: 'lax' }
+  )
+  return nuxtApp._activeOrganizationCookie
+}
+
 export function useOrgs() {
+  const nuxtApp = useNuxtApp() as ReturnType<typeof useNuxtApp> & {
+    _fetchOrganizations?: () => Promise<Organization[]>
+  }
   const auth = useAuth()
   const { client } = auth
   const organization = useCurrentOrganization()
-  const activeOrganizationId = useCookie('activeOrganizationId')
+  const activeOrganizationId = useActiveOrganizationCookie()
   const toast = useToast()
+  const requestFetch = useRequestFetch()
 
   const organizations = useState<Organization[]>('organizations', () => [])
   const isLoading = useState('orgs-loading', () => false)
+  /** True once the org list + active org have been resolved for this user. */
+  const loaded = useState('orgs-loaded', () => false)
   const hasOrganizations = computed(
     () => organizations.value && organizations.value.length > 0
   )
 
-  async function getFullOrganization(orgId?: string) {
-    if (!orgId) {
-      const { data, error } = await client.organization.getFullOrganization()
-      if (error) {
-        toast.add({
-          title: 'Failed to fetch organization',
-          color: 'error'
-        })
-      }
-      return data
+  function notifyError(title: string) {
+    // Toasts queued during SSR would pop up after hydration out of context.
+    if (import.meta.client) {
+      toast.add({ title, color: 'error' })
     }
-    const { data, error } = await client.organization.getFullOrganization({
-      query: { organizationId: orgId }
-    })
-    if (error) {
-      toast.add({
-        title: 'Failed to fetch organization',
-        color: 'error'
-      })
-    }
-    return data
   }
 
-  async function fetchOrganizations() {
-    if (isLoading.value) return organizations.value
+  // requestFetch forwards the request cookies during SSR and calls the auth
+  // handler in-process, instead of the auth client making an HTTP round trip
+  // back to our own origin.
+  async function getFullOrganization(orgId?: string) {
+    try {
+      return await requestFetch<Organization | null>(
+        '/api/auth/organization/get-full-organization',
+        { query: orgId ? { organizationId: orgId } : undefined }
+      )
+    } catch (error) {
+      console.error('Failed to fetch organization', error)
+      notifyError('Failed to fetch organization')
+      return null
+    }
+  }
 
+  async function loadOrganizations(): Promise<Organization[]> {
     isLoading.value = true
     try {
-      const { data, error } = await client.organization.list()
-
-      if (error) {
-        toast.add({
-          title: 'Failed to fetch organizations',
-          color: 'error'
-        })
+      let list: Organization[]
+      try {
+        list = (await requestFetch<Organization[]>(
+          '/api/auth/organization/list'
+        )) ?? []
+      } catch (error) {
+        console.error('Failed to fetch organizations', error)
+        notifyError('Failed to fetch organizations')
         return organizations.value
       }
 
-      const fullOrgs = (await Promise.all(
-        data!.map(org => getFullOrganization(org.id))
-      )) as Organization[]
+      organizations.value = list
 
-      organizations.value = fullOrgs
+      // The session is the source of truth (it is what the API routes use);
+      // the cookie only remembers the last choice across logins.
+      const sessionOrgId = auth.session.value?.activeOrganizationId
+      const selected
+        = list.find(org => org.id === sessionOrgId)
+          ?? list.find(org => org.id === activeOrganizationId.value)
+          ?? list[0]
 
-      const savedOrganization = fullOrgs.find(
-        org => org.id === activeOrganizationId.value
-      )
-      const selectedOrganization = savedOrganization ?? fullOrgs[0]
-
-      if (selectedOrganization) {
-        if (!savedOrganization) {
-          activeOrganizationId.value = selectedOrganization.id
-          console.log(
-            `Auto-selecting first organization: ${selectedOrganization.name}`
-          )
-        }
-        const isActive = await ensureActiveOrganization(selectedOrganization.id)
-        if (isActive) {
-          organization.value = selectedOrganization
-        }
+      if (!selected) {
+        organization.value = null
+        activeOrganizationId.value = null
+        loaded.value = true
+        return list
       }
 
-      return fullOrgs
+      if (import.meta.server && selected.id !== sessionOrgId) {
+        // Switching the session's active org needs a real browser request
+        // (Set-Cookie / origin checks), so leave it to the client. `loaded`
+        // stays false and the client finishes the job after hydration.
+        return list
+      }
+
+      const isActive = await ensureActiveOrganization(selected.id)
+      if (isActive) {
+        organization.value = (await getFullOrganization(selected.id)) ?? selected
+      }
+      loaded.value = true
+      return list
     } finally {
       isLoading.value = false
     }
   }
 
+  /**
+   * Loads the org list and resolves the active org. Concurrent callers share
+   * one request (previously a second caller got the stale, often empty, list
+   * back immediately while the first request was still running).
+   */
+  function fetchOrganizations() {
+    nuxtApp._fetchOrganizations ??= createSingleFlight(loadOrganizations)
+    return nuxtApp._fetchOrganizations()
+  }
+
   async function fetchCurrentOrganization() {
-    if (!activeOrganizationId.value) return null
-    const isActive = await ensureActiveOrganization(activeOrganizationId.value)
+    const id = auth.session.value?.activeOrganizationId ?? activeOrganizationId.value
+    if (!id) return null
+    const isActive = await ensureActiveOrganization(id)
     if (!isActive) return null
-    organization.value = await getFullOrganization(activeOrganizationId.value)
+    organization.value = await getFullOrganization(id)
     return organization.value
   }
 
   async function ensureActiveOrganization(id: string) {
-    if (auth.session.value?.activeOrganizationId === id) return true
+    if (auth.session.value?.activeOrganizationId === id) {
+      activeOrganizationId.value = id
+      return true
+    }
 
     const { error } = await client.organization.setActive({
       organizationId: id
@@ -113,10 +153,7 @@ export function useOrgs() {
     if (error) {
       activeOrganizationId.value = null
       organization.value = null
-      toast.add({
-        title: 'Failed to select organization',
-        color: 'error'
-      })
+      notifyError('Failed to select organization')
       return false
     }
 
@@ -211,6 +248,7 @@ export function useOrgs() {
     activeOrganizationId.value = null
     organizations.value = []
     organization.value = null
+    loaded.value = false
     useProjects().clearProjects()
   }
 
@@ -218,6 +256,7 @@ export function useOrgs() {
     organization,
     organizations,
     isLoading,
+    loaded,
     hasOrganizations,
     fetchOrganizations,
     fetchCurrentOrganization,

@@ -7,10 +7,10 @@
       <UCard class="flex h-full flex-col">
         <template #header>
           <div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+            <h3 class="text-lg font-semibold text-highlighted">
               Create a tag
             </h3>
-            <p class="text-sm text-gray-500">
+            <p class="text-sm text-muted">
               Tags help organize and categorize orders.
             </p>
           </div>

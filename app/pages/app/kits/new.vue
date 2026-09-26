@@ -68,51 +68,40 @@ async function createKit(payload: SaveKitInput) {
 </script>
 
 <template>
-  <div class="min-h-screen bg-default">
-    <UContainer class="mx-auto flex flex-col gap-8 py-10">
-      <header class="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 class="text-3xl font-semibold tracking-tight text-primary-900 dark:text-primary-100">
-            {{ sourceKit ? "Create from kit" : "Create kit" }}
-          </h1>
-          <p class="text-sm text-gray-500">
-            <template v-if="sourceKit">
-              Starting with the items from {{ sourceKit.title }}. Your changes
-              won’t affect the original kit.
-            </template>
-            <template v-else>
-              Build a shareable group of parts from search results or custom items.
-            </template>
-          </p>
-        </div>
+  <DashboardPage
+    id="kit-new"
+    :title="sourceKit ? 'Create from kit' : 'Create kit'"
+    :description="sourceKit
+      ? `Starting with the items from ${sourceKit.title}. Your changes won’t affect the original kit.`
+      : 'Build a shareable group of parts from search results or custom items.'"
+  >
+    <template #actions>
+      <UButton
+        variant="ghost"
+        color="neutral"
+        icon="i-lucide-arrow-left"
+        to="/app/kits"
+      >
+        Back to kits
+      </UButton>
+    </template>
 
-        <UButton
-          variant="ghost"
-          color="neutral"
-          icon="i-lucide-arrow-left"
-          to="/app/kits"
-        >
-          Back to kits
-        </UButton>
-      </header>
+    <UAlert
+      v-if="sourceError"
+      color="warning"
+      variant="soft"
+      icon="i-lucide-alert-triangle"
+      title="Unable to load the source kit"
+      description="You can still create a new kit from scratch."
+    />
 
-      <UAlert
-        v-if="sourceError"
-        color="warning"
-        variant="soft"
-        icon="i-lucide-alert-triangle"
-        title="Unable to load the source kit"
-        description="You can still create a new kit from scratch."
-      />
-
-      <KitEditorForm
-        mode="create"
-        :loading="isSaving"
-        :initial-title="initialTitle"
-        :initial-description="sourceKit?.description"
-        :initial-items="sourceKit?.items"
-        @submit="createKit"
-      />
-    </UContainer>
-  </div>
+    <KitEditorForm
+      mode="create"
+      :loading="isSaving"
+      :initial-title="initialTitle"
+      :initial-description="sourceKit?.description"
+      :initial-items="sourceKit?.items"
+      @submit="createKit"
+    />
+  </DashboardPage>
 </template>

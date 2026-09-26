@@ -16,7 +16,7 @@
       id="features"
       title="Built for FRC teams"
       description="Everything you need to manage your team's orders in one place."
-      class="border-t border-primary"
+      class="border-t border-default"
       :features="features"
     />
 
@@ -47,22 +47,26 @@ useSeoMeta({
   ogDescription: pageDescription
 })
 
+// `user` is a ref — checking it directly is always truthy, which showed
+// signed-out visitors the "View orders" links.
+const isSignedIn = computed(() => Boolean(user.value))
+
 const heroLinks = computed(() => {
-  if (user) {
+  if (isSignedIn.value) {
     return [
       {
-        label: 'View orders',
+        label: 'Open your orders',
         to: '/app',
+        size: 'lg' as const,
         trailingIcon: 'i-lucide-arrow-right'
-        // size: "xl",
-        // color: "neutral",
-        // variant: "subtle",
       },
       {
-        label: 'Read the documentation',
-        to: '/docs',
-        icon: 'i-lucide-book-open'
-        // size: "xl",
+        label: 'Search parts',
+        to: '/search',
+        size: 'lg' as const,
+        color: 'neutral' as const,
+        variant: 'subtle' as const,
+        icon: 'i-lucide-search'
       }
     ]
   }
@@ -70,21 +74,23 @@ const heroLinks = computed(() => {
     {
       label: 'Get started free',
       to: '/auth/signup',
+      size: 'lg' as const,
       trailingIcon: 'i-lucide-arrow-right'
-    },
-    {
-      label: 'Log in',
-      to: '/auth/login',
-      icon: 'i-lucide-log-in'
     },
     {
       label: 'Search parts',
       to: '/search',
+      size: 'lg' as const,
+      color: 'neutral' as const,
+      variant: 'subtle' as const,
       icon: 'i-lucide-search'
     },
     {
-      label: 'Read the documentation',
+      label: 'Read the docs',
       to: '/docs',
+      size: 'lg' as const,
+      color: 'neutral' as const,
+      variant: 'ghost' as const,
       icon: 'i-lucide-book-open'
     }
   ]
@@ -92,9 +98,9 @@ const heroLinks = computed(() => {
 
 const features = [
   {
-    title: 'Smart product inputting',
+    title: 'Paste a link, get the details',
     description:
-      'Just paste a URL, and FRCTools Orders will automatically fetch product details like title, vendor, and pricing from popular suppliers.',
+      'Paste a product URL and FRCTools Orders fills in the title, vendor, variants, and price from popular FRC suppliers.',
     icon: 'i-lucide-clipboard-check'
   },
   {
@@ -130,36 +136,34 @@ const features = [
 ]
 
 const ctaTitle = computed(() =>
-  user ? 'Jump back into your orders' : 'Ready to organize purchases?'
+  isSignedIn.value ? 'Jump back into your orders' : 'Ready to organize purchases?'
 )
 const ctaDescription = computed(() =>
-  user
+  isSignedIn.value
     ? 'Open the app to create a request or advance an order.'
     : 'Create an account and set up your organization in minutes.'
 )
 const ctaLinks = computed(() =>
-  user
+  isSignedIn.value
     ? [
         {
           label: 'Open the app',
           to: '/app',
           trailingIcon: 'i-lucide-arrow-right'
-          // color: "neutral",
         }
       ]
     : [
         {
-          label: 'Sign up',
+          label: 'Sign up free',
           to: '/auth/signup',
           trailingIcon: 'i-lucide-arrow-right'
-          // color: "neutral",
         },
         {
           label: 'Log in',
           to: '/auth/login',
+          color: 'neutral' as const,
+          variant: 'subtle' as const,
           icon: 'i-lucide-log-in'
-          // variant: "outline",
-          // color: "neutral",
         }
       ]
 )

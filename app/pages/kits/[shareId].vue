@@ -332,7 +332,7 @@ async function addKitToOrders() {
               <div class="min-w-0 flex-1">
                 <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                   <div>
-                    <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                    <h2 class="text-lg font-semibold text-highlighted">
                       {{ item.partName }}
                     </h2>
                     <p v-if="item.description" class="text-sm text-muted">

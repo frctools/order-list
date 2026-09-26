@@ -5,14 +5,15 @@
       :schema="schema"
       title="Create an account"
       :submit="{ label: 'Create account' }"
+      :loading="isSubmitting"
       @submit="onSubmit"
     >
       <template #description>
         Already have an account?
         <ULink
-          to="/auth/login"
+          :to="{ path: '/auth/login', query: route.query.redirect ? { redirect: route.query.redirect } : undefined }"
           class="text-primary font-medium"
-        >Login</ULink>.
+        >Log in</ULink>.
       </template>
 
       <template #footer>
@@ -41,10 +42,10 @@ const redirectTarget = computed(() => {
   const redirect = route.query.redirect
 
   if (Array.isArray(redirect)) {
-    return redirect[0]?.startsWith('/') ? redirect[0] : '/app'
+    return redirect[0]?.startsWith('/') && !redirect[0]?.startsWith('//') ? redirect[0] : '/app'
   }
 
-  if (typeof redirect === 'string' && redirect.startsWith('/')) {
+  if (typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')) {
     return redirect
   }
 
@@ -52,58 +53,71 @@ const redirectTarget = computed(() => {
 })
 
 const schema = z.object({
-  name: z.string().min(1),
-  email: z.string().email('Invalid email'),
-  password: z.string()
+  name: z.string().trim().min(1, 'Enter your name'),
+  email: z.string().email('Enter a valid email address'),
+  password: z.string().min(8, 'Use at least 8 characters')
 })
 
 type Schema = z.output<typeof schema>
 
 const toast = useToast()
-async function onSubmit(event: FormSubmitEvent<Schema>) {
-  const { data, error } = await signUp.email({
-    name: event.data.name,
-    email: event.data.email,
-    password: event.data.password
-  })
-  if (data) {
-    toast.add({
-      title: 'Success',
-      description: 'You have successfully signed up!',
-      color: 'success'
-    })
-    await useAuth().fetchSession()
-    await navigateTo(redirectTarget.value)
-  }
+const isSubmitting = ref(false)
 
-  if (error) {
-    toast.add({
-      title: 'Error',
-      description: error.message,
-      color: 'error'
+async function onSubmit(event: FormSubmitEvent<Schema>) {
+  if (isSubmitting.value) return
+  isSubmitting.value = true
+  try {
+    const { data, error } = await signUp.email({
+      name: event.data.name,
+      email: event.data.email,
+      password: event.data.password
     })
+    if (data) {
+      toast.add({
+        title: 'Welcome to FRCTools Orders',
+        color: 'success',
+        icon: 'i-lucide-party-popper'
+      })
+      await useAuth().fetchSession()
+      await navigateTo(redirectTarget.value)
+    }
+    if (error) {
+      toast.add({
+        title: 'Couldn’t create your account',
+        description: error.message,
+        color: 'error',
+        icon: 'i-lucide-alert-triangle'
+      })
+    }
+  } finally {
+    isSubmitting.value = false
   }
 }
+
 const fields = [
   {
     name: 'name',
     type: 'text' as const,
     label: 'Name',
-    placeholder: 'Enter your name',
+    placeholder: 'Your name',
+    autocomplete: 'name',
     required: true
   },
   {
     name: 'email',
-    type: 'text' as const,
+    type: 'email' as const,
     label: 'Email',
-    placeholder: 'Enter your email',
+    placeholder: 'you@example.com',
+    autocomplete: 'email',
     required: true
   },
   {
     name: 'password',
     label: 'Password',
     type: 'password' as const,
-    placeholder: 'Enter your password'
+    placeholder: 'At least 8 characters',
+    autocomplete: 'new-password',
+    required: true
   }
 ]
 </script>

@@ -16,6 +16,8 @@ useSeoMeta({
   ogDescription: pageDescription,
 });
 
+const inDashboard = inject("dashboard-layout", false);
+
 const searchTerm = useRouteQuery<string>("q", "");
 const debouncedSearch = refDebounced(searchTerm, 300);
 const auth = useAuth();
@@ -285,369 +287,391 @@ async function goToCreateKitPage() {
 </script>
 
 <template>
-  <div>
-    <UPageHero
-      title="Search Parts"
-      description="Find parts and products across all vendors"
-    />
+  <DashboardPage
+    id="search"
+    title="Search parts"
+    description="Find parts across FRC vendors, compare prices, and add them straight to your orders."
+  >
+    <div class="mb-6">
+      <UInput
+        v-model="searchTerm"
+        icon="i-lucide-search"
+        size="xl"
+        type="search"
+        placeholder="Search parts, products, or SKUs…"
+        aria-label="Search parts"
+        class="w-full"
+        autofocus
+        :loading="status === 'pending'"
+      />
+    </div>
 
-    <UContainer class="py-8">
-      <div class="mb-8">
-        <UInput
-          v-model="searchTerm"
-          icon="i-lucide-search"
-          size="xl"
-          placeholder="Search for parts, products, or SKUs..."
-          class="w-full"
-          :loading="status === 'pending'"
-        />
-      </div>
-
-      <div
-        v-if="selectedProducts.length > 0"
-        class="sticky top-2 z-20 mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-default bg-default/90 p-3 shadow-sm backdrop-blur"
-      >
-        <UBadge color="primary" variant="soft">
-          {{ selectedProducts.length }} selected
-        </UBadge>
-        <UCheckbox
-          :model-value="allVisibleProductsSelected"
-          label="Select all visible"
-          @update:model-value="setAllVisibleProductsSelected(Boolean($event))"
-        />
-        <div class="ml-auto flex gap-2">
-          <UButton
-            color="neutral"
-            variant="ghost"
-            icon="i-lucide-x"
-            @click="selectedProducts = []"
-          >
-            Clear
-          </UButton>
-          <UButton
-            icon="i-lucide-shopping-cart"
-            @click="openAddSelectedFlow"
-          >
-            Add selected to orders
-          </UButton>
-        </div>
-      </div>
-
-      <div class="flex flex-col sm:flex-row gap-4 mb-6">
-        <div class="flex flex-wrap gap-3 flex-1">
-          <USelectMenu
-            v-model="selectedVendors"
-            :items="availableVendors"
-            value-key="value"
-            multiple
-            placeholder="Filter by vendor"
-            class="w-48"
-            :disabled="availableVendors.length === 0"
-          />
-
-          <USelectMenu
-            v-model="sortBy"
-            :items="sortOptions"
-            value-key="value"
-            class="w-48"
-          />
-
-          <UButton
-            v-if="selectedVendors.length > 0"
-            variant="ghost"
-            color="neutral"
-            icon="i-lucide-x"
-            @click="clearFilters"
-          >
-            Clear filters
-          </UButton>
-          <UButton
-            variant="soft"
-            color="neutral"
-            icon="i-lucide-package-plus"
-            @click="goToCreateKitPage"
-          >
-            Create kit
-          </UButton>
-        </div>
-
-        <div class="flex gap-1">
-          <UButton
-            :variant="viewMode === 'grid' ? 'solid' : 'ghost'"
-            color="neutral"
-            icon="i-lucide-layout-grid"
-            square
-            @click="viewMode = 'grid'"
-          />
-          <UButton
-            :variant="viewMode === 'list' ? 'solid' : 'ghost'"
-            color="neutral"
-            icon="i-lucide-list"
-            square
-            @click="viewMode = 'list'"
-          />
-        </div>
-      </div>
-
-      <p
-        v-if="debouncedSearch && searchResults.length > 0"
-        class="text-sm text-muted mb-4"
-      >
-        {{ searchResults.length }} result{{
-          searchResults.length !== 1 ? "s" : ""
-        }}
-        for "{{ debouncedSearch }}"
-      </p>
-
-      <div
-        v-if="status === 'pending' && debouncedSearch"
-        class="flex justify-center py-12"
-      >
-        <UIcon
-          name="i-lucide-loader-2"
-          class="w-8 h-8 animate-spin text-primary"
-        />
-      </div>
-
-      <UPageCard v-else-if="!debouncedSearch" class="text-center py-12">
-        <UIcon
-          name="i-lucide-search"
-          class="w-12 h-12 mx-auto mb-4 text-muted"
-        />
-        <h3 class="text-lg font-medium mb-2">Start searching</h3>
-        <p class="text-muted">
-          Enter a search term to find parts across all vendors
-        </p>
-      </UPageCard>
-
-      <UPageCard
-        v-else-if="searchResults.length === 0"
-        class="text-center py-12"
-      >
-        <UIcon
-          name="i-lucide-package-x"
-          class="w-12 h-12 mx-auto mb-4 text-muted"
-        />
-        <h3 class="text-lg font-medium mb-2">No results found</h3>
-        <p class="text-muted">Try adjusting your search term or filters</p>
-      </UPageCard>
-
-      <div
-        v-else-if="viewMode === 'grid'"
-        class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
-      >
-        <UPageCard
-          v-for="item in searchResults"
-          :key="item.id"
-          class="flex flex-col"
-          :class="isProductSelected(item.id) ? 'ring-2 ring-primary' : ''"
+    <div
+      v-if="selectedProducts.length > 0"
+      :class="inDashboard ? 'top-0' : 'top-[calc(var(--ui-header-height)+0.5rem)]'"
+      class="sticky z-20 mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-default bg-default/90 p-3 shadow-sm backdrop-blur"
+    >
+      <UBadge color="primary" variant="soft">
+        {{ selectedProducts.length }} selected
+      </UBadge>
+      <UCheckbox
+        :model-value="allVisibleProductsSelected"
+        label="Select all visible"
+        @update:model-value="setAllVisibleProductsSelected(Boolean($event))"
+      />
+      <div class="ml-auto flex gap-2">
+        <UButton
+          color="neutral"
+          variant="ghost"
+          icon="i-lucide-x"
+          @click="selectedProducts = []"
         >
-          <div class="mb-2 flex justify-end">
-            <UCheckbox
-              :model-value="isProductSelected(item.id)"
-              :aria-label="`Select ${item.title}`"
-              @update:model-value="setProductSelected(item, Boolean($event))"
-            />
-          </div>
+          Clear
+        </UButton>
+        <UButton
+          icon="i-lucide-shopping-cart"
+          @click="openAddSelectedFlow"
+        >
+          Add selected to orders
+        </UButton>
+      </div>
+    </div>
+
+    <div class="flex flex-col sm:flex-row gap-4 mb-6">
+      <div class="flex flex-wrap gap-3 flex-1">
+        <USelectMenu
+          v-model="selectedVendors"
+          :items="availableVendors"
+          value-key="value"
+          multiple
+          placeholder="Filter by vendor"
+          class="w-48"
+          :disabled="availableVendors.length === 0"
+        />
+
+        <USelectMenu
+          v-model="sortBy"
+          :items="sortOptions"
+          value-key="value"
+          class="w-48"
+        />
+
+        <UButton
+          v-if="selectedVendors.length > 0"
+          variant="ghost"
+          color="neutral"
+          icon="i-lucide-x"
+          @click="clearFilters"
+        >
+          Clear filters
+        </UButton>
+        <UButton
+          variant="soft"
+          color="neutral"
+          icon="i-lucide-package-plus"
+          @click="goToCreateKitPage"
+        >
+          Create kit
+        </UButton>
+      </div>
+
+      <UFieldGroup aria-label="Result layout">
+        <UButton
+          :variant="viewMode === 'grid' ? 'soft' : 'ghost'"
+          color="neutral"
+          icon="i-lucide-layout-grid"
+          aria-label="Grid view"
+          :aria-pressed="viewMode === 'grid'"
+          square
+          @click="viewMode = 'grid'"
+        />
+        <UButton
+          :variant="viewMode === 'list' ? 'soft' : 'ghost'"
+          color="neutral"
+          icon="i-lucide-list"
+          aria-label="List view"
+          :aria-pressed="viewMode === 'list'"
+          square
+          @click="viewMode = 'list'"
+        />
+      </UFieldGroup>
+    </div>
+
+    <p
+      v-if="debouncedSearch && searchResults.length > 0"
+      class="text-sm text-muted mb-4"
+    >
+      {{ searchResults.length }} result{{
+        searchResults.length !== 1 ? "s" : ""
+      }}
+      for "{{ debouncedSearch }}"
+    </p>
+
+    <div
+      v-if="status === 'pending' && debouncedSearch"
+      class="flex justify-center py-12"
+    >
+      <UIcon
+        name="i-lucide-loader-2"
+        class="w-8 h-8 animate-spin text-primary"
+      />
+    </div>
+
+    <UPageCard v-else-if="!debouncedSearch" class="text-center py-12">
+      <UIcon
+        name="i-lucide-search"
+        class="w-12 h-12 mx-auto mb-4 text-muted"
+      />
+      <h3 class="text-lg font-medium mb-2">Start searching</h3>
+      <p class="text-muted">
+        Enter a search term to find parts across all vendors
+      </p>
+    </UPageCard>
+
+    <UPageCard
+      v-else-if="searchResults.length === 0"
+      class="text-center py-12"
+    >
+      <UIcon
+        name="i-lucide-package-x"
+        class="w-12 h-12 mx-auto mb-4 text-muted"
+      />
+      <h3 class="text-lg font-medium mb-2">No results found</h3>
+      <p class="text-muted">Try adjusting your search term or filters</p>
+    </UPageCard>
+
+    <div
+      v-else-if="viewMode === 'grid'"
+      class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+    >
+      <UPageCard
+        v-for="item in searchResults"
+        :key="item.id"
+        class="flex flex-col"
+        :class="isProductSelected(item.id) ? 'ring-2 ring-primary' : ''"
+      >
+        <div class="relative mb-3">
           <NuxtLink
             :to="getProductUrl(item)"
-            class="aspect-square bg-elevated rounded-lg mb-3 overflow-hidden"
+            class="block aspect-square overflow-hidden rounded-lg bg-white ring-1 ring-default"
           >
             <img
               v-if="item.image"
               :src="item.image"
               :alt="item.title"
-              class="w-full max-w-full h-auto object-contain"
-            />
-            <div v-else class="w-full h-full flex items-center justify-center">
-              <UIcon name="i-lucide-package" class="w-12 h-12 text-muted" />
+              loading="lazy"
+              class="size-full object-contain p-2"
+            >
+            <div v-else class="flex size-full items-center justify-center bg-elevated">
+              <UIcon name="i-lucide-package" class="size-12 text-dimmed" />
             </div>
           </NuxtLink>
-
-          <div class="flex-1 flex flex-col">
-            <UBadge
-              v-if="item.vendorName"
-              variant="subtle"
-              size="sm"
-              class="w-fit mb-1"
-            >
-              {{ item.vendorName }}
-            </UBadge>
-            <NuxtLink :to="getProductUrl(item)" class="hover:text-primary">
-              <h3 class="font-medium line-clamp-2 mb-1 word-break-word">
-                {{ item.title }}
-              </h3>
-            </NuxtLink>
-            <p
-              v-if="item.description"
-              class="text-sm text-muted line-clamp-2 mb-2 break-all"
-            >
-              {{ item.description }}
-            </p>
-            <div class="mt-auto flex items-center justify-between gap-2">
-              <div>
-                <p
-                  v-if="formatPrice(item.price, item.currency)"
-                  class="font-semibold text-primary"
-                >
-                  {{ formatPrice(item.price, item.currency) }}
-                </p>
-              </div>
-              <div class="flex gap-1">
-                <UButton
-                  :to="getProductUrl(item)"
-                  icon="i-lucide-chart-no-axes-column"
-                  size="sm"
-                  variant="ghost"
-                >
-                  Details
-                </UButton>
-                <UButton
-                  v-if="item.originalUrl"
-                  :to="getAddToOrderUrl(item.originalUrl)"
-                  icon="i-lucide-plus"
-                  size="sm"
-                  variant="soft"
-                >
-                  Order
-                </UButton>
-                <UButton
-                  :to="item.originalUrl"
-                  target="_blank"
-                  icon="i-lucide-external-link"
-                  size="sm"
-                  variant="ghost"
-                />
-              </div>
-            </div>
-          </div>
-        </UPageCard>
-      </div>
-
-      <div v-else class="space-y-3">
-        <UPageCard
-          v-for="item in searchResults"
-          :key="item.id"
-          class="flex gap-4"
-          :class="isProductSelected(item.id) ? 'ring-2 ring-primary' : ''"
-        >
           <UCheckbox
-            class="shrink-0 self-center"
             :model-value="isProductSelected(item.id)"
             :aria-label="`Select ${item.title}`"
+            class="absolute left-2 top-2 rounded-md bg-default/90 p-1 shadow-xs"
             @update:model-value="setProductSelected(item, Boolean($event))"
           />
-          <div
-            class="w-20 h-20 bg-elevated rounded-lg shrink-0 overflow-hidden"
-          >
-            <img
-              v-if="item.image"
-              :src="item.image"
-              :alt="item.title"
-              class="w-full h-full object-contain"
-            />
-            <div v-else class="w-full h-full flex items-center justify-center">
-              <UIcon name="i-lucide-package" class="w-8 h-8 text-muted" />
-            </div>
-          </div>
+        </div>
 
-          <div class="flex-1 min-w-0">
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0">
-                <NuxtLink :to="getProductUrl(item)" class="hover:text-primary">
-                  <h3 class="font-medium truncate">
-                    {{ item.title }}
-                  </h3>
-                </NuxtLink>
-                <p
-                  v-if="item.description"
-                  class="text-sm text-muted line-clamp-1"
-                >
-                  {{ item.description }}
-                </p>
-              </div>
-              <div class="flex items-center gap-2 shrink-0">
-                <p
-                  v-if="formatPrice(item.price, item.currency)"
-                  class="font-semibold text-primary whitespace-nowrap"
-                >
-                  {{ formatPrice(item.price, item.currency) }}
-                </p>
+        <div class="flex-1 flex flex-col">
+          <UBadge
+            v-if="item.vendorName"
+            variant="subtle"
+            size="sm"
+            class="w-fit mb-1"
+          >
+            {{ item.vendorName }}
+          </UBadge>
+          <NuxtLink :to="getProductUrl(item)" class="hover:text-primary">
+            <h3 class="font-medium line-clamp-2 mb-1 break-words">
+              {{ item.title }}
+            </h3>
+          </NuxtLink>
+          <p
+            v-if="item.description"
+            class="text-sm text-muted line-clamp-2 mb-2 break-words"
+          >
+            {{ item.description }}
+          </p>
+          <div class="mt-auto flex items-center justify-between gap-2">
+            <div>
+              <p
+                v-if="formatPrice(item.price, item.currency)"
+                class="font-semibold text-primary"
+              >
+                {{ formatPrice(item.price, item.currency) }}
+              </p>
+            </div>
+            <div class="flex gap-1">
+              <UTooltip text="Price history & details">
                 <UButton
                   :to="getProductUrl(item)"
                   icon="i-lucide-chart-no-axes-column"
                   size="sm"
+                  color="neutral"
                   variant="ghost"
-                >
-                  Details
-                </UButton>
-                <UButton
-                  v-if="item.originalUrl"
-                  :to="getAddToOrderUrl(item.originalUrl)"
-                  icon="i-lucide-plus"
-                  size="sm"
-                  variant="soft"
-                >
-                  Add
-                </UButton>
+                  aria-label="Price history and details"
+                />
+              </UTooltip>
+              <UTooltip text="Open on vendor site">
                 <UButton
                   :to="item.originalUrl"
                   target="_blank"
+                  rel="noopener"
                   icon="i-lucide-external-link"
                   size="sm"
-                  variant="ghost"
-                />
-              </div>
-            </div>
-            <UBadge
-              v-if="item.vendorName"
-              variant="subtle"
-              size="sm"
-              class="mt-1"
-            >
-              {{ item.vendorName }}
-            </UBadge>
-          </div>
-        </UPageCard>
-      </div>
-
-      <ClientOnly>
-        <UModal
-          v-model:open="isOrderModalOpen"
-          title="Add selected products to orders"
-          :description="`${selectedProducts.length} product${selectedProducts.length === 1 ? '' : 's'} will be added as new orders.`"
-        >
-          <template #body>
-            <div class="space-y-5">
-              <div class="space-y-2">
-                <p class="text-sm font-medium">Destination project</p>
-                <ProjectSwitcher />
-                <p class="text-xs text-muted">
-                  Each selected product will be created with a quantity of one.
-                </p>
-              </div>
-              <div class="flex justify-end gap-2">
-                <UButton
                   color="neutral"
                   variant="ghost"
-                  :disabled="isAddingSelected"
-                  @click="isOrderModalOpen = false"
-                >
-                  Cancel
-                </UButton>
-                <UButton
-                  icon="i-lucide-shopping-cart"
-                  :loading="isAddingSelected"
-                  :disabled="!projects.project.value"
-                  @click="addSelectedToOrders"
-                >
-                  Add {{ selectedProducts.length }} to orders
-                </UButton>
-              </div>
+                  aria-label="Open on vendor site"
+                />
+              </UTooltip>
+              <UButton
+                v-if="item.originalUrl"
+                :to="getAddToOrderUrl(item.originalUrl)"
+                icon="i-lucide-plus"
+                size="sm"
+                variant="soft"
+              >
+                Add
+              </UButton>
             </div>
-          </template>
-        </UModal>
-      </ClientOnly>
-    </UContainer>
-  </div>
+          </div>
+        </div>
+      </UPageCard>
+    </div>
+
+    <div v-else class="space-y-3">
+      <UPageCard
+        v-for="item in searchResults"
+        :key="item.id"
+        class="flex gap-4"
+        :class="isProductSelected(item.id) ? 'ring-2 ring-primary' : ''"
+      >
+        <UCheckbox
+          class="shrink-0 self-center"
+          :model-value="isProductSelected(item.id)"
+          :aria-label="`Select ${item.title}`"
+          @update:model-value="setProductSelected(item, Boolean($event))"
+        />
+        <div
+          class="w-20 h-20 bg-elevated rounded-lg shrink-0 overflow-hidden"
+        >
+          <img
+            v-if="item.image"
+            :src="item.image"
+            :alt="item.title"
+            loading="lazy"
+            class="size-full object-contain"
+          >
+          <div v-else class="w-full h-full flex items-center justify-center">
+            <UIcon name="i-lucide-package" class="w-8 h-8 text-muted" />
+          </div>
+        </div>
+
+        <div class="flex-1 min-w-0">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <NuxtLink :to="getProductUrl(item)" class="hover:text-primary">
+                <h3 class="font-medium truncate">
+                  {{ item.title }}
+                </h3>
+              </NuxtLink>
+              <p
+                v-if="item.description"
+                class="text-sm text-muted line-clamp-1"
+              >
+                {{ item.description }}
+              </p>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <p
+                v-if="formatPrice(item.price, item.currency)"
+                class="font-semibold text-primary whitespace-nowrap"
+              >
+                {{ formatPrice(item.price, item.currency) }}
+              </p>
+              <UTooltip text="Price history & details">
+                <UButton
+                  :to="getProductUrl(item)"
+                  icon="i-lucide-chart-no-axes-column"
+                  size="sm"
+                  color="neutral"
+                  variant="ghost"
+                  aria-label="Price history and details"
+                />
+              </UTooltip>
+              <UTooltip text="Open on vendor site">
+                <UButton
+                  :to="item.originalUrl"
+                  target="_blank"
+                  rel="noopener"
+                  icon="i-lucide-external-link"
+                  size="sm"
+                  color="neutral"
+                  variant="ghost"
+                  aria-label="Open on vendor site"
+                />
+              </UTooltip>
+              <UButton
+                v-if="item.originalUrl"
+                :to="getAddToOrderUrl(item.originalUrl)"
+                icon="i-lucide-plus"
+                size="sm"
+                variant="soft"
+              >
+                Add
+              </UButton>
+            </div>
+          </div>
+          <UBadge
+            v-if="item.vendorName"
+            variant="subtle"
+            size="sm"
+            class="mt-1"
+          >
+            {{ item.vendorName }}
+          </UBadge>
+        </div>
+      </UPageCard>
+    </div>
+
+    <ClientOnly>
+      <UModal
+        v-model:open="isOrderModalOpen"
+        title="Add selected products to orders"
+        :description="`${selectedProducts.length} product${selectedProducts.length === 1 ? '' : 's'} will be added as new orders.`"
+      >
+        <template #body>
+          <div class="space-y-5">
+            <div class="space-y-2">
+              <p class="text-sm font-medium">Destination project</p>
+              <ProjectSwitcher />
+              <p class="text-xs text-muted">
+                Each selected product will be created with a quantity of one.
+              </p>
+            </div>
+            <div class="flex justify-end gap-2">
+              <UButton
+                color="neutral"
+                variant="ghost"
+                :disabled="isAddingSelected"
+                @click="isOrderModalOpen = false"
+              >
+                Cancel
+              </UButton>
+              <UButton
+                icon="i-lucide-shopping-cart"
+                :loading="isAddingSelected"
+                :disabled="!projects.project.value"
+                @click="addSelectedToOrders"
+              >
+                Add {{ selectedProducts.length }} to orders
+              </UButton>
+            </div>
+          </div>
+        </template>
+      </UModal>
+    </ClientOnly>
+  </DashboardPage>
 </template>

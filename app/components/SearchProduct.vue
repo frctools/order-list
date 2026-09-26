@@ -84,7 +84,7 @@ function select(item: CommandPaletteItem | null) {
     :loading="status === 'pending'"
     :groups="groups"
     class="flex-1"
-    placeholder="Search products..."
+    placeholder="Search the parts catalog…"
     :ui="{
       empty: 'p-0',
     }"
@@ -92,10 +92,15 @@ function select(item: CommandPaletteItem | null) {
   >
     <template #item-trailing="{ index }">
       <UButton
-        size="sm"
+        size="xs"
+        color="neutral"
+        variant="ghost"
         icon="i-lucide-external-link"
         :to="products[index]?.originalUrl"
         target="_blank"
+        rel="noopener"
+        aria-label="Open product page"
+        @click.stop
       />
     </template>
     <template #empty>

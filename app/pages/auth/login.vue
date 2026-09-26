@@ -5,12 +5,14 @@
       :schema="schema"
       title="Welcome back"
       icon="i-lucide-lock"
+      :loading="isSubmitting"
+      :submit="{ label: 'Log in' }"
       @submit="onSubmit"
     >
       <template #description>
         Don't have an account?
         <ULink
-          to="/auth/signup"
+          :to="{ path: '/auth/signup', query: route.query.redirect ? { redirect: route.query.redirect } : undefined }"
           class="text-primary font-medium"
         >Sign up</ULink>.
       </template>
@@ -39,55 +41,72 @@ useSeoMeta({
 })
 
 const { signIn } = useAuth()
+const route = useRoute()
+const isSubmitting = ref(false)
+
+const redirectTarget = computed(() => {
+  const redirect = Array.isArray(route.query.redirect)
+    ? route.query.redirect[0]
+    : route.query.redirect
+  // Only allow same-site paths (not protocol-relative "//host" URLs).
+  return typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')
+    ? redirect
+    : '/app'
+})
 
 const schema = z.object({
-  email: z.string().email('Invalid email'),
-  password: z.string()
+  email: z.string().email('Enter a valid email address'),
+  password: z.string().min(1, 'Enter your password')
 })
 
 type Schema = z.output<typeof schema>
 
 const toast = useToast()
 async function onSubmit(event: FormSubmitEvent<Schema>) {
-  const { data, error } = await signIn.email(
-    {
-      email: event.data.email,
-      password: event.data.password
+  if (isSubmitting.value) return
+  isSubmitting.value = true
+  try {
+    const { data, error } = await signIn.email(
+      {
+        email: event.data.email,
+        password: event.data.password
+      }
+    )
+    if (data) {
+      await useAuth().fetchSession()
+      if (!route.query.oauth_query) {
+        await navigateTo(redirectTarget.value)
+      }
     }
-  )
-  if (data) {
-    toast.add({
-      title: 'Success',
-      description: 'You have successfully logged in.',
-      color: 'success'
-    })
-    await useAuth().fetchSession()
-    if (!useRoute().query.oauth_query) {
-      await navigateTo('/app')
+    if (error) {
+      toast.add({
+        title: 'Couldn’t log in',
+        description: error.message,
+        color: 'error',
+        icon: 'i-lucide-alert-triangle'
+      })
     }
-  }
-  if (error) {
-    toast.add({
-      title: 'Error',
-      description: error.message,
-      color: 'error'
-    })
+  } finally {
+    isSubmitting.value = false
   }
 }
 
 const fields = [
   {
     name: 'email',
-    type: 'text' as const,
+    type: 'email' as const,
     label: 'Email',
-    placeholder: 'Enter your email',
+    placeholder: 'you@example.com',
+    autocomplete: 'email',
     required: true
   },
   {
     name: 'password',
     label: 'Password',
     type: 'password' as const,
-    placeholder: 'Enter your password'
+    placeholder: 'Enter your password',
+    autocomplete: 'current-password',
+    required: true
   }
 ]
 </script>

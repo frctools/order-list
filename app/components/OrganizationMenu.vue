@@ -4,6 +4,10 @@ import { z } from 'zod'
 import type { DropdownMenuItem, FormSubmitEvent } from '#ui/types'
 import { createTeamSchema } from '~/composables/organizations'
 
+defineProps<{
+  collapsed?: boolean
+}>()
+
 const auth = useAuth()
 const toast = useToast()
 
@@ -13,25 +17,23 @@ const {
   organizations,
   organization: activeOrganization,
   isLoading: organizationsLoading,
+  loaded: organizationsLoaded,
   fetchOrganizations,
   fetchCurrentOrganization,
   selectTeam,
   createTeam
 } = useOrgs()
 
-if (import.meta.client) {
-  onMounted(async () => {
-    if (!organizations.value.length) {
-      await fetchOrganizations()
-    }
-    if (!activeOrganization.value) {
-      await fetchCurrentOrganization()
-    }
-  })
-}
+// Normally resolved by the global middleware; this covers the case where SSR
+// had to defer switching the session's active org to the client.
+onMounted(async () => {
+  if (!organizationsLoaded.value) {
+    await fetchOrganizations()
+  }
+})
 const isLoadingOrganizations = computed(() => organizationsLoading.value)
 
-const isCreateModalOpen = ref(false)
+const isCreateModalOpen = useState('create-organization-open', () => false)
 const isInviteModalOpen = ref(false)
 const isCreatePending = ref(false)
 const isInvitePending = ref(false)
@@ -247,23 +249,30 @@ async function handleInviteMember(event: FormSubmitEvent<InviteMemberForm>) {
 </script>
 
 <template>
-  <div class="flex items-center gap-3">
+  <div class="w-full">
     <UDropdownMenu
       :items="organizationDropdownItems"
-      :popper="{ placement: 'bottom-start' }"
+      :content="{ align: 'center', collisionPadding: 12 }"
+      :ui="{ content: collapsed ? 'w-60' : 'w-(--reka-dropdown-menu-trigger-width)' }"
     >
       <UButton
+        :avatar="{
+          src: activeOrganization?.logo || undefined,
+          alt: activeOrganization?.name ?? 'Organization',
+          icon: activeOrganization ? undefined : 'i-lucide-building-2'
+        }"
+        :label="collapsed ? undefined : (activeOrganization?.name ?? 'Select organization')"
+        :trailing-icon="collapsed ? undefined : 'i-lucide-chevrons-up-down'"
         color="neutral"
         variant="ghost"
-        icon="i-lucide-building-2"
-        trailing-icon="i-lucide-chevron-down"
-        :loading="isLoadingOrganizations"
-      >
-        <span v-if="activeOrganization">
-          {{ activeOrganization.name }}
-        </span>
-        <span v-else> Select organization </span>
-      </UButton>
+        block
+        :square="collapsed"
+        :loading="isLoadingOrganizations && !activeOrganization"
+        class="data-[state=open]:bg-elevated"
+        :class="[!collapsed && 'py-2']"
+        :ui="{ trailingIcon: 'text-dimmed', label: 'font-semibold' }"
+        :aria-label="activeOrganization ? `Organization: ${activeOrganization.name}` : 'Select organization'"
+      />
     </UDropdownMenu>
 
     <ClientOnly>
@@ -286,7 +295,9 @@ async function handleInviteMember(event: FormSubmitEvent<InviteMemberForm>) {
             >
               <UInput
                 v-model="createOrganizationState.name"
-                placeholder="Acme Robotics"
+                placeholder="Team 1234 Robotics"
+                class="w-full"
+                autofocus
               />
             </UFormField>
 
@@ -298,7 +309,8 @@ async function handleInviteMember(event: FormSubmitEvent<InviteMemberForm>) {
             >
               <UInput
                 v-model="createOrganizationState.slug"
-                placeholder="acme-robotics"
+                placeholder="team-1234"
+                class="w-full"
               />
             </UFormField>
 
@@ -353,6 +365,8 @@ async function handleInviteMember(event: FormSubmitEvent<InviteMemberForm>) {
                 v-model="inviteMemberState.email"
                 type="email"
                 placeholder="alex@example.com"
+                class="w-full"
+                autofocus
               />
             </UFormField>
 
@@ -368,6 +382,7 @@ async function handleInviteMember(event: FormSubmitEvent<InviteMemberForm>) {
                   { label: 'Admin', value: 'admin' }
                 ]"
                 placeholder="Select role"
+                class="w-full"
               />
             </UFormField>
 

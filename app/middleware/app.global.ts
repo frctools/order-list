@@ -3,7 +3,19 @@ export default defineNuxtRouteMiddleware(async (to) => {
   const auth = useAuth()
   if (!auth.loggedIn.value) {
     if (to.path.startsWith('/app')) {
-      return navigateTo('/auth/login')
+      return navigateTo({
+        path: '/auth/login',
+        query: to.fullPath !== '/app' ? { redirect: to.fullPath } : undefined
+      })
+    }
+  }
+  if (to.path === '/search' || to.path.startsWith('/products/')) {
+    setPageLayout(auth.loggedIn.value ? 'app' : 'default')
+  }
+  if (auth.loggedIn.value) {
+    const orgs = useOrgs()
+    if (!orgs.loaded.value) {
+      await orgs.fetchOrganizations()
     }
   }
   if (auth.session.value && to.path === '/organization') {
