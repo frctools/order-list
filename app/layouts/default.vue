@@ -1,4 +1,6 @@
 <script setup>
+const auth = useAuth();
+
 useHead({
   meta: [{ name: "viewport", content: "width=device-width, initial-scale=1" }],
   link: [{ rel: "icon", href: "/favicon.ico" }],
@@ -21,28 +23,38 @@ useSeoMeta({
 
 <template>
   <div>
-    <UHeader>
+    <UHeader :toggle="false">
       <template #left>
         <NuxtLink
-          class="font-bold font-display text-3xl text-blue-950 dark:text-white flex justify-center items-center gap-2"
+          class=" font-bold flex items-center gap-2 text-3xl font-bold tracking-tight text-primary-950 dark:text-white"
           to="/"
-          >FRCTools <span class="md:inline hidden">Orders</span></NuxtLink
+          aria-label="FRCTools Orders home"
+          >FRCTools <span class="hidden font-medium text-primary md:inline">Orders</span></NuxtLink
         >
         <UButton
           to="/search"
           icon="i-lucide-search"
           variant="ghost"
           color="neutral"
-          class="ml-4"
+          class="ml-2 md:ml-4"
+          aria-label="Search parts"
         >
-          <span class="hidden md:block">Search Parts</span>
+          <span class="hidden md:block">Search parts</span>
         </UButton>
       </template>
 
       <template #right>
-        <div class="flex items-center gap-2">
-          <ProfileMenu />
+        <div class="flex items-center gap-1 sm:gap-2">
           <UColorModeButton />
+          <UButton
+            v-if="auth.loggedIn.value"
+            to="/app"
+            trailing-icon="i-lucide-arrow-right"
+            size="sm"
+          >
+            Open app
+          </UButton>
+          <AccountMenu />
         </div>
       </template>
     </UHeader>
@@ -56,7 +68,7 @@ useSeoMeta({
     <UFooter>
       <template #left>
         <p class="text-sm text-muted">
-          Built by Graham • © {{ new Date().getFullYear() }}
+          Built by Graham · © {{ new Date().getFullYear() }}
         </p>
       </template>
 
@@ -74,10 +86,11 @@ useSeoMeta({
           to="https://www.buymeacoffee.com/grahamsh"
           target="_blank"
           icon="i-lucide-heart"
-          aria-label="Donate"
-          class="text-pink-500"
+          aria-label="Support development"
+          color="neutral"
           variant="ghost"
-          label="Support Development"
+          label="Support development"
+          :ui="{ leadingIcon: 'text-pink-500' }"
         />
         <UButton
           to="https://github.com/frctools/order-list"

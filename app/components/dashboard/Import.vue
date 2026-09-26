@@ -434,7 +434,7 @@ const importedOrders = computed<OrderEditorValues[]>(() => {
         variantId: state.variantId || undefined,
         variantTitle: state.variantTitle || undefined,
         unitPriceCents: state.unitPrice
-          ? Math.ceil(Number(state.unitPrice) * 100)
+          ? Math.round(Number(state.unitPrice) * 100)
           : undefined,
         tagIds: [],
       };
@@ -492,7 +492,7 @@ async function handleImport() {
       />
 
       <div v-if="isSearching" class="mt-4 flex items-center gap-2">
-        <UIcon name="i-heroicons-arrow-path" class="animate-spin" />
+        <UIcon name="i-lucide-loader-circle" class="animate-spin" />
         <span>Searching for products...</span>
       </div>
 
@@ -522,7 +522,7 @@ async function handleImport() {
         </template>
 
         <template #description-cell="{ row }">
-          <span class="text-sm text-gray-500 max-w-32 truncate">{{
+          <span class="text-sm text-muted max-w-32 truncate">{{
             row.original.description || "—"
           }}</span>
         </template>
@@ -555,7 +555,7 @@ async function handleImport() {
                     }}</span>
                     <span
                       v-if="getMenuItemDescription(item)"
-                      class="text-xs text-gray-500 truncate"
+                      class="text-xs text-muted truncate"
                       >{{ getMenuItemDescription(item) }}</span
                     >
                   </div>
@@ -565,10 +565,10 @@ async function handleImport() {
 
             <div
               v-if="isLoadingDetails(row.original.key)"
-              class="flex items-center gap-1 text-gray-500"
+              class="flex items-center gap-1 text-muted"
             >
               <UIcon
-                name="i-heroicons-arrow-path"
+                name="i-lucide-loader-circle"
                 class="h-3 w-3 animate-spin"
               />
               <span class="text-xs">Loading product details...</span>
@@ -592,7 +592,7 @@ async function handleImport() {
                   class="flex items-center gap-1 text-amber-600 dark:text-amber-400"
                 >
                   <UIcon
-                    name="i-heroicons-exclamation-triangle"
+                    name="i-lucide-alert-triangle"
                     class="h-4 w-4"
                   />
                   <span class="text-xs"
@@ -622,7 +622,7 @@ async function handleImport() {
 
         <template #actions-cell="{ row }">
           <UButton
-            icon="i-heroicons-trash"
+            icon="i-lucide-trash-2"
             color="neutral"
             variant="ghost"
             size="xs"

@@ -2,10 +2,10 @@
   <div class="flex min-h-[60vh] items-center justify-center px-6 py-12">
     <UCard class="max-w-lg w-full space-y-6">
       <template #header>
-        <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100">
+        <h1 class="text-xl font-semibold text-highlighted">
           Accept invitation
         </h1>
-        <p class="mt-2 text-sm text-gray-500">
+        <p class="mt-2 text-sm text-muted">
           We&apos;re connecting you with your organization.
         </p>
       </template>
@@ -17,7 +17,7 @@
         <USkeleton class="h-4 w-2/3" />
         <USkeleton class="h-4 w-1/2" />
         <USkeleton class="h-10 w-full rounded-lg" />
-        <p class="text-sm text-gray-500">
+        <p class="text-sm text-muted">
           Processing your invitation…
         </p>
       </div>
@@ -83,6 +83,9 @@ if (!auth.loggedIn.value) {
       if (res.error) {
         throw new Error(res.error.message)
       }
+      // Accepting makes the invited org active on the session; pull that in
+      // so fetchOrganizations selects it instead of the previously saved org.
+      await auth.fetchSession();
       const orgs = useOrgs();
       await orgs.fetchOrganizations();
 

@@ -1,47 +1,50 @@
 <template>
-  <div class="flex items-center">
-    <UButton
-      v-if="!user"
-      to="/auth/login"
-      size="sm"
-      color="primary"
-      variant="solid"
-    >
-      Log in
-    </UButton>
-    <template v-else>
-      <OrganizationMenu />
+  <UButton
+    v-if="!user"
+    to="/auth/login"
+    icon="i-lucide-log-in"
+    :label="collapsed ? undefined : 'Log in'"
+    color="neutral"
+    variant="ghost"
+    block
+    :square="collapsed"
+  />
 
-      <UDropdownMenu
-        :items="dropdownItems"
-        :popper="{ placement: 'bottom-end' }"
-      >
-        <UButton
-          type="button"
-          variant="ghost"
-          color="neutral"
-          class="flex items-center gap-2"
-        >
-          <UAvatar
-            :src="user.image ?? undefined"
-            :alt="user.name ?? user.email ?? 'Profile'"
-            size="xs"
-          >
-            {{ avatarFallback }}
-          </UAvatar>
-          <span class="hidden md:inline text-sm font-medium">
-            {{ user.name ?? user.email }}
-          </span>
-          <UIcon name="i-heroicons-chevron-down-20-solid" class="h-4 w-4" />
-        </UButton>
-      </UDropdownMenu>
-    </template>
-  </div>
+  <UDropdownMenu
+    v-else
+    :items="dropdownItems"
+    :content="{ align: 'center', collisionPadding: 12 }"
+    :ui="{ content: collapsed ? 'w-56' : 'w-(--reka-dropdown-menu-trigger-width)' }"
+  >
+    <UButton
+      :avatar="{
+        src: user.image ?? undefined,
+        alt: user.name || user.email || 'Profile',
+        text: avatarFallback
+      }"
+      :label="collapsed ? undefined : (user.name || user.email)"
+      :trailing-icon="collapsed ? undefined : 'i-lucide-chevrons-up-down'"
+      color="neutral"
+      variant="ghost"
+      block
+      :square="collapsed"
+      class="data-[state=open]:bg-elevated"
+      :ui="{ trailingIcon: 'text-dimmed' }"
+      aria-label="Account menu"
+    />
+  </UDropdownMenu>
 </template>
 
 <script setup lang="ts">
+import type { DropdownMenuItem } from "@nuxt/ui";
+
+defineProps<{
+  collapsed?: boolean;
+}>();
+
 const auth = useAuth();
 const toast = useToast();
+const colorMode = useColorMode();
 
 const pending = ref(false);
 const user = computed(() => auth.user.value);
@@ -67,32 +70,68 @@ async function handleSignOut() {
   }
 }
 
-const dropdownItems = computed(() => [
+const dropdownItems = computed<DropdownMenuItem[][]>(() => [
   [
     {
-      label: "Dashboard",
-      to: "/app",
-      icon: "i-heroicons-home",
-    },
-    {
-      label: "My Kits",
-      to: "/app/kits",
-      icon: "i-lucide-package",
+      type: "label",
+      label: user.value?.name ?? "Signed in",
+      description: user.value?.email,
+      avatar: {
+        src: user.value?.image ?? undefined,
+        alt: user.value?.name || user.value?.email || "Profile",
+        text: avatarFallback.value,
+      },
     },
   ],
   [
     {
       label: "Settings",
       to: "/settings",
-      icon: "i-heroicons-cog-6-tooth",
+      icon: "i-lucide-settings",
+    },
+    {
+      label: "Appearance",
+      icon: "i-lucide-sun-moon",
+      children: [
+        {
+          label: "System",
+          icon: "i-lucide-monitor",
+          type: "checkbox",
+          checked: colorMode.preference === "system",
+          onSelect(e: Event) {
+            e.preventDefault();
+            colorMode.preference = "system";
+          },
+        },
+        {
+          label: "Light",
+          icon: "i-lucide-sun",
+          type: "checkbox",
+          checked: colorMode.preference === "light",
+          onSelect(e: Event) {
+            e.preventDefault();
+            colorMode.preference = "light";
+          },
+        },
+        {
+          label: "Dark",
+          icon: "i-lucide-moon",
+          type: "checkbox",
+          checked: colorMode.preference === "dark",
+          onSelect(e: Event) {
+            e.preventDefault();
+            colorMode.preference = "dark";
+          },
+        },
+      ],
     },
   ],
   [
     {
       label: pending.value ? "Signing out…" : "Sign out",
-      icon: "i-heroicons-arrow-left-on-rectangle",
+      icon: "i-lucide-log-out",
       disabled: pending.value,
-      onClick: handleSignOut,
+      onSelect: handleSignOut,
     },
   ],
 ]);

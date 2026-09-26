@@ -4,6 +4,7 @@ import { oauthProviderClient } from '@better-auth/oauth-provider/client'
 import { apiKeyClient } from '@better-auth/api-key/client'
 
 import { defu } from 'defu'
+import type { NuxtApp } from '#app'
 import type { RouteLocationRaw } from 'vue-router'
 
 interface RuntimeAuthConfig {
@@ -11,20 +12,26 @@ interface RuntimeAuthConfig {
   redirectGuestTo: RouteLocationRaw | string
 }
 
-export function useAuth() {
-  const url = useRequestURL()
-
-  const headers = import.meta.server ? useRequestHeaders() : undefined
-  const requestEvent = import.meta.server ? useRequestEvent() : null
-
-  const client = createAuthClient({
+function makeAuthClient(origin: string, headers?: Record<string, string>) {
+  return createAuthClient({
     plugins: [organizationClient(), oauthProviderClient(), apiKeyClient()],
-    baseURL: url.origin,
+    baseURL: origin,
     fetchOptions: {
       headers
     }
   })
-  type SessionResponse = Awaited<ReturnType<typeof client.getSession>>['data']
+}
+
+type AuthClient = ReturnType<typeof makeAuthClient>
+type SessionResponse = Awaited<ReturnType<AuthClient['getSession']>>['data']
+
+interface AuthRuntime {
+  client: AuthClient
+  fetchSession: () => Promise<SessionResponse | null>
+}
+
+export function useAuth() {
+  const nuxtApp = useNuxtApp() as NuxtApp & { _auth?: AuthRuntime }
 
   const options = defu(
     useRuntimeConfig().public.auth as Partial<RuntimeAuthConfig>,
@@ -33,61 +40,63 @@ export function useAuth() {
       redirectGuestTo: '/'
     }
   )
-  const session = useState<(typeof client.$Infer.Session)['session'] | null>(
+  const session = useState<(AuthClient['$Infer']['Session'])['session'] | null>(
     'auth:session',
     () => null
   )
-  const user = useState<(typeof client.$Infer.Session)['user'] | null>(
+  const user = useState<(AuthClient['$Infer']['Session'])['user'] | null>(
     'auth:user',
     () => null
   )
-  const sessionFetching = import.meta.server
-    ? ref(false)
-    : useState('auth:sessionFetching', () => false)
-  const activeOrganizationId = useCookie('activeOrganizationId')
+  const activeOrganizationId = useActiveOrganizationCookie()
 
-  const fetchSession = async () => {
-    if (sessionFetching.value) {
-      return
-    }
-    sessionFetching.value = true
-    let data: SessionResponse | null = null
+  if (!nuxtApp._auth) {
+    const url = useRequestURL()
+    const headers = import.meta.server ? useRequestHeaders() : undefined
+    const requestEvent = import.meta.server ? useRequestEvent() : null
+    const client = makeAuthClient(url.origin, headers)
 
-    if (import.meta.server && requestEvent) {
-      try {
-        data = await requestEvent.$fetch<SessionResponse>(
-          '/api/auth/get-session',
-          {
-            headers
-          }
-        )
-      } catch (error) {
-        console.error('SSR get-session failed', error)
-      }
-    }
+    const fetchSession = createSingleFlight(async () => {
+      let data: SessionResponse | null = null
 
-    if (!data) {
-      const res = await client.getSession({
-        fetchOptions: {
-          headers
+      if (import.meta.server && requestEvent) {
+        try {
+          data = await requestEvent.$fetch<SessionResponse>(
+            '/api/auth/get-session',
+            { headers }
+          )
+        } catch (error) {
+          console.error('SSR get-session failed', error)
         }
+      }
+
+      if (!data) {
+        try {
+          const res = await client.getSession({ fetchOptions: { headers } })
+          data = res.data ?? null
+        } catch (error) {
+          console.error('get-session failed', error)
+        }
+      }
+
+      // useState refs point at shared payload state, so these stay valid
+      // for later callers too.
+      session.value = data?.session || null
+      user.value = data?.user || null
+      return data
+    })
+
+    if (import.meta.client) {
+      client.$store.listen('$sessionSignal', (signal) => {
+        if (!signal) return
+        void fetchSession()
       })
-      data = res.data ?? null
     }
 
-    session.value = data?.session || null
-
-    user.value = data?.user || null
-    sessionFetching.value = false
-    return data
+    nuxtApp._auth = { client, fetchSession }
   }
 
-  if (import.meta.client) {
-    client.$store.listen('$sessionSignal', async (signal) => {
-      if (!signal) return
-      await fetchSession()
-    })
-  }
+  const { client, fetchSession } = nuxtApp._auth
 
   return {
     session,

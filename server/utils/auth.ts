@@ -9,6 +9,7 @@ import InviteEmail from "./InviteEmail.vue";
 import ResetPasswordEmail from "./ResetPasswordEmail.vue";
 import { render } from "@vue-email/render";
 import * as schema from "./auth-schema";
+import { asc, eq } from "drizzle-orm";
 
 export const useAuth = () => {
   const origin = getRequestURL(useEvent()).origin;
@@ -128,6 +129,40 @@ export const useAuth = () => {
       },
     },
     session: {
+    },
+    databaseHooks: {
+      session: {
+        create: {
+          // better-auth creates sessions with no active organization, so on a
+          // fresh login every org-scoped API route 400s until the client calls
+          // setActive. Seed it here: prefer the org remembered in the
+          // `activeOrganizationId` cookie (if still a member), else the oldest
+          // membership.
+          before: async (session) => {
+            if ((session as { activeOrganizationId?: string | null }).activeOrganizationId) {
+              return;
+            }
+            const memberships = await useDB()
+              .select({ organizationId: schema.member.organizationId })
+              .from(schema.member)
+              .where(eq(schema.member.userId, session.userId))
+              .orderBy(asc(schema.member.createdAt));
+            if (!memberships.length) return;
+
+            let remembered: string | undefined;
+            try {
+              remembered = getCookie(useEvent(), "activeOrganizationId");
+            } catch {
+              // No request context (e.g. session created outside a request).
+            }
+            const activeOrganizationId =
+              memberships.find((m) => m.organizationId === remembered)
+                ?.organizationId ?? memberships[0]!.organizationId;
+
+            return { data: { ...session, activeOrganizationId } };
+          },
+        },
+      },
     },
   });
 };

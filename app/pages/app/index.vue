@@ -1,620 +1,735 @@
 <template>
-  <div class="min-h-screen bg-default">
-    <UContainer class="mx-auto flex flex-col gap-6 py-6 lg:py-8">
-      <header class="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p class="mb-1 text-xs font-semibold uppercase tracking-wider text-primary">
-            Project order board
-          </p>
-          <div class="flex flex-wrap items-center gap-3">
-            <h1
-              class="text-3xl font-semibold tracking-tight text-primary-900 dark:text-primary-100"
-            >
-              Orders
-            </h1>
-            <ProjectSwitcher @change="handleProjectChange" />
-          </div>
-          <p class="mt-1 max-w-2xl text-sm text-gray-500">
-            {{ projects.project.value?.description || 'Track parts from request to delivery for this project.' }}
-          </p>
-        </div>
+  <DashboardPage
+    id="orders"
+    body-class="overscroll-none"
+  >
+    <template #title>
+      <div class="flex min-w-0 items-center gap-2">
+        <h1 class="hidden shrink-0 font-semibold text-highlighted sm:block">
+          Orders
+        </h1>
+        <UIcon
+          name="i-lucide-chevron-right"
+          class="hidden size-4 shrink-0 text-dimmed sm:block"
+        />
+        <ProjectSwitcher @change="handleProjectChange" />
+      </div>
+    </template>
 
-        <div class="flex flex-wrap items-center justify-center gap-2">
-          <UTabs
-            v-model="viewMode"
-            size="sm"
-            :items="viewOptions"
-            aria-label="Select orders layout"
-            variant="pill"
-            class="gap-0"
-          />
-          <UButton
-            variant="soft"
-            color="neutral"
-            icon="i-lucide-refresh-ccw"
-            :loading="isPending"
-            @click="refreshOrders"
-          >
-            Refresh
-          </UButton>
-          <UButton
-            variant="soft"
-            icon="i-lucide-import"
-            @click="handleImportClick"
-          >
-            Import orders
-          </UButton>
-          <UButton icon="i-lucide-plus" @click="() => openCreateEditor()">
-            New order
-          </UButton>
-        </div>
-      </header>
-
-      <UAlert
-        v-if="isError"
-        color="error"
-        variant="soft"
-        icon="i-lucide-alert-triangle"
-        title="Unable to load orders"
-        :description="extractErrorMessage(error)"
+    <template #actions>
+      <UTabs
+        v-model="viewMode"
+        size="sm"
+        :items="viewOptions"
+        aria-label="Select orders layout"
+        variant="pill"
+        :content="false"
+        class="hidden gap-0 sm:flex"
       />
-
-      <div
-        class="sticky top-2 z-20 rounded-2xl border border-default bg-default/90 p-3 backdrop-blur"
+      <UTooltip text="Refresh">
+        <UButton
+          variant="ghost"
+          color="neutral"
+          icon="i-lucide-refresh-ccw"
+          aria-label="Refresh orders"
+          :loading="isFetching"
+          @click="refreshOrders"
+        />
+      </UTooltip>
+      <UButton
+        variant="soft"
+        color="neutral"
+        icon="i-lucide-file-spreadsheet"
+        aria-label="Import orders from a BOM"
+        @click="handleImportClick"
       >
-        <div class="flex flex-wrap items-center gap-2">
-          <UInput
-            v-model="searchFilter"
-            icon="i-lucide-search"
-            placeholder="Search parts, vendors, people…"
-            class="min-w-56 flex-1"
-          />
-          <USelectMenu
-            v-model="vendorFilter"
-            :items="vendorOptions"
-            value-key="value"
-            searchable
-            placeholder="All vendors"
-            class="w-44"
-          />
-          <USelectMenu
-            v-model="statusFilter"
-            :items="statusOptions"
-            value-key="value"
-            placeholder="All statuses"
-            class="w-40"
-          />
-          <USelectMenu
-            v-model="tagFilter"
-            :items="tagOptions"
-            value-key="value"
-            searchable
-            placeholder="All tags"
-            class="w-40"
-          />
+        <span class="hidden sm:inline">Import</span>
+      </UButton>
+      <UButton
+        icon="i-lucide-plus"
+        aria-label="New order"
+        @click="() => openCreateEditor()"
+      >
+        <span class="hidden sm:inline">New order</span>
+        <UKbd
+          value="N"
+          size="sm"
+          class="ml-1 hidden bg-white/20 text-inverted ring-0 lg:inline-flex"
+        />
+      </UButton>
+    </template>
+
+    <template
+      v-if="!hasEmptyState"
+      #toolbar
+    >
+      <div class="flex w-full flex-wrap items-center gap-2">
+        <UInput
+          ref="searchInput"
+          v-model="searchFilter"
+          icon="i-lucide-search"
+          placeholder="Search parts, vendors, people…"
+          aria-label="Search orders"
+          class="min-w-56 flex-1"
+          :ui="{ trailing: 'pe-2' }"
+        >
+          <template #trailing>
+            <UButton
+              v-if="searchFilter"
+              color="neutral"
+              variant="link"
+              size="xs"
+              icon="i-lucide-x"
+              aria-label="Clear search"
+              @click="searchFilter = ''"
+            />
+            <UKbd
+              v-else
+              value="/"
+              class="hidden sm:inline-flex"
+            />
+          </template>
+        </UInput>
+        <USelectMenu
+          v-model="vendorFilter"
+          :items="vendorOptions"
+          value-key="value"
+          icon="i-lucide-store"
+          placeholder="Vendor"
+          aria-label="Filter by vendor"
+          clear
+          class="w-40"
+        />
+        <USelectMenu
+          v-model="statusFilter"
+          :items="statusOptions"
+          value-key="value"
+          icon="i-lucide-circle-dot"
+          placeholder="Status"
+          aria-label="Filter by status"
+          :search-input="false"
+          clear
+          class="w-36"
+        />
+        <USelectMenu
+          v-model="tagFilter"
+          :items="tagOptions"
+          value-key="value"
+          icon="i-lucide-tag"
+          placeholder="Tag"
+          aria-label="Filter by tag"
+          clear
+          class="w-36"
+        />
+        <UPopover :content="{ align: 'end' }">
           <UButton
-            v-if="activeFilterCount"
+            color="neutral"
+            :variant="startDate || endDate ? 'soft' : 'outline'"
+            icon="i-lucide-calendar-range"
+            :label="dateRangeLabel"
+            aria-label="Filter by date"
+          />
+          <template #content>
+            <div class="grid w-64 gap-3 p-3">
+              <UFormField label="From">
+                <UInput
+                  v-model="startDate"
+                  type="date"
+                  class="w-full"
+                />
+              </UFormField>
+              <UFormField label="To">
+                <UInput
+                  v-model="endDate"
+                  type="date"
+                  class="w-full"
+                />
+              </UFormField>
+              <p class="text-xs text-muted">
+                Uses the order date, or the request date for parts that
+                haven’t been ordered yet.
+              </p>
+              <UButton
+                v-if="startDate || endDate"
+                size="xs"
+                color="neutral"
+                variant="soft"
+                block
+                @click="startDate = undefined; endDate = undefined"
+              >
+                Clear dates
+              </UButton>
+            </div>
+          </template>
+        </UPopover>
+        <template v-if="activeFilterCount">
+          <span class="text-xs text-muted tabular-nums">
+            {{ filteredCount }} of {{ ordersState.length }}
+          </span>
+          <UButton
             color="neutral"
             variant="ghost"
+            size="sm"
             icon="i-lucide-x"
             @click="clearFilters"
           >
-            Clear {{ activeFilterCount }}
+            Clear filters
           </UButton>
-        </div>
+        </template>
       </div>
+    </template>
 
-      <div v-if="viewMode === 'board'">
-        <div
-          v-if="isPending && ordersState.length === 0"
-          class="grid gap-4 md:grid-cols-3"
-        >
-          <USkeleton
-            v-for="status in statuses"
-            :key="status.key"
-            class="h-64 rounded-xl"
-          />
-        </div>
+    <UAlert
+      v-if="isError"
+      color="error"
+      variant="soft"
+      icon="i-lucide-alert-triangle"
+      title="Unable to load orders"
+      :description="extractErrorMessage(error)"
+      :actions="[{ label: 'Try again', color: 'error', variant: 'outline', onClick: () => refreshOrders() }]"
+    />
 
-        <div
-          v-else
-          class="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-none px-4 pb-3 lg:mx-0 lg:grid lg:grid-cols-3 lg:overflow-visible lg:px-0"
-        >
-          <section
-            v-for="column in boardColumns"
-            :key="column.key"
-            class="flex min-w-[86vw] snap-center flex-col sm:min-w-96 lg:min-w-0"
-          >
-            <div class="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
-                  {{ column.label }}
-                </h2>
-                <p class="text-xs text-gray-500">
-                  {{ column.description }}
-                </p>
-              </div>
-              <UBadge variant="soft" :color="column.color">
-                {{ column.items.length }}
-              </UBadge>
-            </div>
-
-            <div
-              class="h-[calc(100dvh-18rem)] min-h-96 flex-1 space-y-2 overflow-y-auto overscroll-none rounded-xl border border-dashed border-gray-300/60 bg-white/80 p-2 transition-all dark:bg-gray-950/60"
-              :class="
-                dropTarget === column.key
-                  ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-transparent'
-                  : ''
-              "
-              @dragover.prevent="onDragOver(column.key)"
-              @dragleave="onDragLeave(column.key)"
-              @drop.prevent="onDrop(column.key)"
-            >
-              <p
-                v-if="column.items.length === 0"
-                class="py-10 text-center text-sm text-gray-500"
-              >
-                {{ activeFilterCount ? 'No matching orders in this stage.' : 'Drag an order here or create a new one.' }}
-              </p>
-
-              <UCard
-                v-for="order in column.items"
-                :key="order.id"
-                class="cursor-grab shadow-xs active:cursor-grabbing"
-                :ui="{ header: 'px-3 py-2 sm:px-3 sm:py-2', body: 'px-3 py-2 sm:px-3 sm:py-2', footer: 'px-2 py-1.5 sm:px-2 sm:py-1.5' }"
-                :draggable="!isOrderUpdating(order.id)"
-                @dragstart="onDragStart(order.id)"
-                @dragend="onDragEnd"
-              >
-                <template #header>
-                  <div class="flex items-start justify-between gap-2">
-                    <div class="min-w-0">
-                      <p
-                        class="truncate text-sm font-semibold leading-tight text-gray-900 dark:text-white"
-                        :title="order.partName"
-                      >
-                        {{ order.partName }}
-                      </p>
-                      <p class="mt-0.5 truncate text-[11px] leading-tight text-gray-500">
-                        Requested by
-                        {{ order.requestedByName ?? "unknown user" }}
-                      </p>
-                    </div>
-                    <UBadge color="neutral" variant="soft" size="sm">
-                      x{{ order.quantity }}
-                    </UBadge>
-                  </div>
-                </template>
-
-                <div class="space-y-2">
-                  <p
-                    v-if="order.description"
-                    class="line-clamp-2 text-xs leading-snug text-gray-500 dark:text-gray-300"
-                  >
-                    {{ order.description }}
-                  </p>
-
-                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] leading-tight text-gray-500">
-                    <div
-                      v-if="order.unitPriceCents !== null"
-                      class="flex items-center gap-1"
-                    >
-                      <UIcon name="i-lucide-banknote" class="size-3" />
-                      <span>{{
-                        formatCurrencyFromCents(order.unitPriceCents)
-                      }}</span>
-                    </div>
-                    <div
-                      v-if="order.variantTitle || order.variantId"
-                      class="flex min-w-0 items-center gap-1"
-                    >
-                      <UIcon name="i-lucide-tags" class="size-3 shrink-0" />
-                      <span class="max-w-40 truncate">
-                        {{ order.variantTitle ?? order.variantId }}
-                        <span
-                          v-if="order.variantTitle && order.variantId"
-                          class="text-gray-400"
-                        >
-                          ({{ order.variantId }})
-                        </span>
-                      </span>
-                    </div>
-                    <div
-                      v-if="order.vendorName"
-                      class="flex min-w-0 items-center gap-1"
-                    >
-                      <UIcon name="i-lucide-store" class="size-3 shrink-0" />
-                      <span class="max-w-36 truncate">{{ order.vendorName }}</span>
-                    </div>
-
-                    <div v-if="order.orderedAt" class="flex items-center gap-1">
-                      <UIcon name="i-lucide-calendar-check" class="size-3" />
-                      <span>Ordered {{ formatDate(order.orderedAt) }}</span>
-                    </div>
-                    <div v-if="order.arrivedAt" class="flex items-center gap-1">
-                      <UIcon name="i-lucide-package-check" class="size-3" />
-                      <span>Arrived {{ formatDate(order.arrivedAt) }}</span>
-                    </div>
-                    <div class="flex items-center gap-1">
-                      <UIcon name="i-lucide-clock-8" class="size-3" />
-                      <span
-                        >Updated
-                        {{ formatDate(order.updatedAt) ?? "just now" }}</span
-                      >
-                    </div>
-                  </div>
-
-                  <div
-                    v-if="order.tags && order.tags.length > 0"
-                    class="flex flex-wrap gap-1"
-                  >
-                    <UBadge
-                      v-for="tag in order.tags"
-                      :key="tag.id"
-                      variant="subtle"
-                      size="xs"
-                      :style="{
-                        backgroundColor: tag.color,
-                      }"
-                      :class="textColor(tag.color)"
-                    >
-                      {{ tag.name }}
-                    </UBadge>
-                  </div>
-                </div>
-
-                <template #footer>
-                  <div class="flex items-center justify-end gap-1">
-                    <UButton
-                      v-if="order.externalUrl"
-                      size="xs"
-                      variant="soft"
-                      color="neutral"
-                      icon="i-lucide-shopping-cart"
-                      :to="order.externalUrl"
-                      target="_blank"
-                    >
-                      Order
-                    </UButton>
-                    <UButton
-                      v-if="getNextStatus(order.status)"
-                      size="xs"
-                      variant="soft"
-                      color="primary"
-                      icon="i-lucide-chevrons-right"
-                      :loading="isOrderUpdating(order.id)"
-                      @click="advanceStatus(order)"
-                    >
-                      Advance
-                    </UButton>
-                    <UTooltip text="Edit order">
-                      <UButton
-                        size="xs"
-                        variant="ghost"
-                        color="neutral"
-                        icon="i-lucide-pencil"
-                        aria-label="Edit order"
-                        :loading="isOrderUpdating(order.id)"
-                        @click="openEditEditor(order)"
-                      />
-                    </UTooltip>
-                    <UTooltip text="Remove order">
-                      <UButton
-                        size="xs"
-                        variant="ghost"
-                        color="error"
-                        icon="i-lucide-trash-2"
-                        aria-label="Remove order"
-                        :loading="isOrderDeleting(order.id)"
-                        @click="deleteOrder(order)"
-                      />
-                    </UTooltip>
-                  </div>
-                </template>
-              </UCard>
-            </div>
-          </section>
-        </div>
+    <div
+      v-if="hasEmptyState"
+      class="flex flex-col items-center rounded-2xl border border-dashed border-default px-6 py-16 text-center"
+    >
+      <div class="mb-4 flex size-12 items-center justify-center rounded-full bg-primary/10">
+        <UIcon
+          name="i-lucide-package-plus"
+          class="size-6 text-primary"
+        />
       </div>
+      <h2 class="text-lg font-semibold text-highlighted">
+        No orders in {{ projects.project.value?.name ?? 'this project' }} yet
+      </h2>
+      <p class="mx-auto mt-1 max-w-md text-sm text-muted">
+        Paste a product link to create your first request, import a BOM, or
+        find parts across vendors.
+      </p>
+      <div class="mt-6 flex flex-wrap justify-center gap-2">
+        <UButton
+          icon="i-lucide-plus"
+          @click="() => openCreateEditor()"
+        >
+          New order
+        </UButton>
+        <UButton
+          color="neutral"
+          variant="subtle"
+          icon="i-lucide-file-spreadsheet"
+          @click="handleImportClick"
+        >
+          Import BOM
+        </UButton>
+        <UButton
+          color="neutral"
+          variant="ghost"
+          icon="i-lucide-search"
+          to="/search"
+        >
+          Search parts
+        </UButton>
+      </div>
+    </div>
 
-      <div v-else class="overflow-hidden">
-        <div class="mb-3 flex flex-wrap gap-3">
-          <div class="w-44">
-            <UFormField label="Start date">
-              <UInput
-                v-model="startDate"
-                type="date"
-                class="w-full"
-                size="sm"
-              />
-            </UFormField>
-          </div>
-          <div class="w-44">
-            <UFormField label="End date">
-              <UInput v-model="endDate" type="date" class="w-full" size="sm" />
-            </UFormField>
-          </div>
-        </div>
-
-        <div class="mb-4 flex items-end justify-between gap-4">
-          <div>
-            <h2 class="text-lg font-medium text-gray-900 dark:text-white">
-              Total
-              {{
-                statusFilter
-                  ? statusLookup[statusFilter]?.pastTense
-                  : "spent and requested"
-              }}
-            </h2>
-            <p class="text-2xl font-semibold">
-              {{ formatCurrencyFromCents(totalSpentCents) ?? "$0.00" }}
-            </p>
-            <p class="text-sm text-gray-500">
-              Showing {{ filteredCount }} orders
-            </p>
-          </div>
-
-          <div class="flex gap-2">
-            <UDropdownMenu
-              :items="columnMenuItems"
-              :content="{ align: 'end' }"
-            >
-              <UButton
-                variant="soft"
-                color="neutral"
-                icon="i-lucide-columns-3"
-                trailing-icon="i-lucide-chevron-down"
-              >
-                Columns
-              </UButton>
-            </UDropdownMenu>
-            <UButton
-              variant="soft"
-              color="neutral"
-              icon="i-lucide-download"
-              :disabled="filteredTableRows.length === 0"
-              :loading="isExportingCsv"
-              @click="exportOrdersCsv"
-            >
-              {{ selectedFilteredTableRows.length ? `Export ${selectedFilteredTableRows.length} selected` : 'Export CSV' }}
-            </UButton>
-            <UButton variant="ghost" color="neutral" @click="clearFilters">
-              Clear
-            </UButton>
-          </div>
-        </div>
-        <div v-if="isPending && ordersState.length === 0" class="space-y-2">
-          <USkeleton v-for="row in 6" :key="row" class="h-12 rounded-lg" />
-        </div>
-        <div v-else class="w-full overflow-hidden rounded-xl border border-default bg-default">
-          <div class="max-h-[70dvh] overflow-auto overscroll-none">
-            <UTable
-              v-model:sorting="sorting"
-              v-model:column-visibility="columnVisibility"
-              v-model:column-pinning="columnPinning"
-              v-model:row-selection="rowSelection"
-              v-model:pagination="pagination"
-              :columns="orderTableColumns"
-              :data="filteredTableRows"
-              :loading="isPending"
-              :get-row-id="getOrderRowId"
-              :pagination-options="{
-                getPaginationRowModel: getPaginationRowModel(),
-              }"
-              :ui="{
-                root: 'overflow-visible overscroll-none',
-                base: 'min-w-full w-max',
-                thead: 'bg-elevated',
-                tr: 'group',
-                th: 'h-8 bg-elevated px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap',
-                td: 'px-2 py-1.5 text-xs whitespace-nowrap',
-              }"
-              sticky
-              class="w-full"
-            >
-          <template #partName-cell="{ row }">
-            <div class="flex max-w-52 flex-col py-0.5">
-              <span
-                class="truncate text-xs font-semibold text-gray-900 dark:text-white"
-                :title="row.original.partName"
-              >
-                {{ row.getValue("partName") }}
-              </span>
-              <span
-                v-if="row.original.description"
-                class="max-w-52 truncate text-[11px] leading-tight text-gray-500"
-                :title="row.original.description"
-              >
-                {{ row.original.description }}
-              </span>
-            </div>
-          </template>
-          <template #tags-cell="{ row }">
-            <div class="flex max-w-36 gap-1 overflow-hidden">
-              <UBadge
-                v-for="tag in row.original.tags"
-                :key="tag.id"
-                variant="subtle"
-                size="xs"
-                :style="{
-                  backgroundColor: tag.color,
-                }"
-                :class="textColor(tag.color)"
-              >
-                {{ tag.name }}
-              </UBadge>
-            </div>
-          </template>
-          <template #status-cell="{ row }">
-            <UBadge
-              variant="soft"
-              :color="
-                statusLookup[
-                  row.getValue('status') as keyof typeof statusLookup
-                ]?.color ?? 'neutral'
-              "
-            >
-              {{
-                statusLookup[
-                  row.getValue("status") as keyof typeof statusLookup
-                ]?.label ?? row.getValue("status")
-              }}
-            </UBadge>
-          </template>
-
-          <template #quantity-cell="{ row }">
-            <span class="font-medium text-gray-900 dark:text-white">
-              x{{ row.getValue("quantity") }}
-            </span>
-          </template>
-
-          <template #unitPriceCents-cell="{ row }">
-            {{
-              formatCurrencyFromCents(row.getValue("unitPriceCents")) ?? "--"
-            }}
-          </template>
-
-          <template #vendorName-cell="{ row }">
-            {{ row.getValue("vendorName") ?? row.original["vendorId"] ?? "--" }}
-          </template>
-
-          <template #requestedByName-cell="{ row }">
-            {{
-              row.getValue("requestedByName") ??
-              row.getValue("requestedBy") ??
-              "--"
-            }}
-          </template>
-
-          <template #updatedAt-cell="{ row }">
-            {{ formatTableDate(row.getValue("updatedAt")) ?? "--" }}
-          </template>
-
-          <template #actions-cell="{ row }">
-            <div class="flex justify-end gap-1">
-              <UButton
-                v-if="row.original.externalUrl"
-                size="xs"
-                variant="soft"
-                color="neutral"
-                icon="i-lucide-shopping-cart"
-                :to="row.original.externalUrl"
-                target="_blank"
-              >
-                Order
-              </UButton>
-              <UButton
-                v-if="getNextStatus(row.getValue('status'))"
-                size="xs"
-                variant="soft"
-                color="primary"
-                icon="i-lucide-chevrons-right"
-                :loading="isOrderUpdating(row.id)"
-                @click="advanceStatus(row.original)"
-              >
-                Advance
-              </UButton>
-              <UTooltip text="Edit order">
-                <UButton
-                  size="xs"
-                  variant="ghost"
-                  color="neutral"
-                  icon="i-lucide-pencil"
-                  aria-label="Edit order"
-                  :loading="isOrderUpdating(row.id)"
-                  @click="openEditEditor(row.original)"
-                />
-              </UTooltip>
-              <UTooltip text="Remove order">
-                <UButton
-                  size="xs"
-                  variant="ghost"
-                  color="error"
-                  icon="i-lucide-trash-2"
-                  aria-label="Remove order"
-                  :loading="isOrderDeleting(row.original.id)"
-                  @click="deleteOrder(row.original)"
-                />
-              </UTooltip>
-            </div>
-          </template>
-            </UTable>
-          </div>
-
-          <div
-            class="flex flex-wrap items-center justify-between gap-3 border-t border-default px-3 py-2"
-          >
-            <div class="flex flex-wrap items-center gap-2">
-              <span class="text-xs text-muted">
-                {{ pageRangeLabel }}
-              </span>
-              <template v-if="selectedFilteredTableRows.length">
-                <UBadge color="primary" variant="soft" size="sm">
-                  {{ selectedFilteredTableRows.length }} selected
-                </UBadge>
-                <UDropdownMenu :items="selectedStatusItems">
-                  <UButton
-                    size="xs"
-                    color="neutral"
-                    variant="soft"
-                    icon="i-lucide-list-checks"
-                    trailing-icon="i-lucide-chevron-down"
-                    :loading="isBulkUpdating"
-                  >
-                    Set status
-                  </UButton>
-                </UDropdownMenu>
-                <UButton
-                  size="xs"
-                  color="neutral"
-                  variant="ghost"
-                  icon="i-lucide-x"
-                  @click="clearRowSelection"
-                >
-                  Clear selection
-                </UButton>
-              </template>
-            </div>
-
-            <div class="flex items-center gap-2">
-              <USelect
-                v-model="pagination.pageSize"
-                :items="pageSizeOptions"
-                value-key="value"
-                size="xs"
-                class="w-32"
-                aria-label="Orders per page"
-              />
-              <UPagination
-                :page="pagination.pageIndex + 1"
-                :items-per-page="pagination.pageSize"
-                :total="filteredTableRows.length"
-                size="xs"
-                :sibling-count="1"
-                @update:page="pagination.pageIndex = $event - 1"
-              />
-            </div>
-          </div>
-        </div>
+    <template v-else>
+    <div v-if="viewMode === 'board'">
+      <div
+        v-if="isPending && ordersState.length === 0"
+        class="grid gap-4 md:grid-cols-3"
+      >
+        <USkeleton
+          v-for="status in statuses"
+          :key="status.key"
+          class="h-64 rounded-xl"
+        />
       </div>
 
       <div
-        v-if="hasEmptyState"
-        class="rounded-2xl border border-dashed border-gray-200/60 py-16 text-center"
+        v-else
+        class="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-none px-4 pb-3 lg:mx-0 lg:grid lg:grid-cols-3 lg:overflow-visible lg:px-0"
       >
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-          No orders yet
-        </h3>
-        <p class="mx-auto mt-1 max-w-lg text-sm text-gray-500">
-          Start this project by adding its first part request.
-        </p>
-        <div class="mt-6">
-          <UButton icon="i-lucide-plus" @click="() => openCreateEditor()">
-            Create order
+        <section
+          v-for="column in boardColumns"
+          :key="column.key"
+          class="flex min-w-[86vw] snap-center flex-col sm:min-w-96 lg:min-w-0"
+        >
+          <div class="mb-2 flex items-center justify-between gap-3 bg-default px-1 py-1 lg:sticky lg:-top-6 lg:z-10">
+            <div class="min-w-0">
+              <h2 class="flex items-center gap-2 text-base font-semibold text-highlighted">
+                <UIcon
+                  :name="column.icon"
+                  class="size-4 shrink-0"
+                  :class="statusTextClass[column.key]"
+                />
+                {{ column.label }}
+                <span class="text-sm font-normal text-muted tabular-nums">{{ column.items.length }}</span>
+              </h2>
+              <p class="truncate text-xs text-muted">
+                {{ column.description }}
+              </p>
+            </div>
+            <span
+              v-if="columnTotalCents(column.items)"
+              class="shrink-0 text-xs font-medium text-muted tabular-nums"
+            >
+              {{ formatCurrencyFromCents(columnTotalCents(column.items)) }}
+            </span>
+          </div>
+
+          <div
+            class="min-h-96 flex-1 space-y-2 rounded-xl border bg-elevated/40 p-2 transition-colors"
+            :class="
+              dropTarget === column.key
+                ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                : 'border-default'
+            "
+            @dragover.prevent="onDragOver(column.key)"
+            @dragleave="onDragLeave(column.key)"
+            @drop.prevent="onDrop(column.key)"
+          >
+            <div
+              v-if="column.items.length === 0"
+              class="flex h-full min-h-40 flex-col items-center justify-center gap-2 px-4 text-center text-sm text-muted"
+            >
+              <UIcon
+                :name="activeFilterCount ? 'i-lucide-filter-x' : column.icon"
+                class="size-5 text-dimmed"
+              />
+              {{ activeFilterCount ? 'No orders here match your filters.' : column.emptyText }}
+            </div>
+
+            <UCard
+              v-for="order in column.items"
+              :key="order.id"
+              class="cursor-grab shadow-xs transition-opacity active:cursor-grabbing"
+              :class="{ 'opacity-40': draggingId === order.id }"
+              :ui="{ header: 'px-3 py-2 sm:px-3 sm:py-2', body: 'px-3 py-2 sm:px-3 sm:py-2', footer: 'px-2 py-1.5 sm:px-2 sm:py-1.5' }"
+              :draggable="!isOrderUpdating(order.id)"
+              @dragstart="onDragStart(order.id)"
+              @dragend="onDragEnd"
+            >
+              <template #header>
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0">
+                    <p
+                      class="line-clamp-2 text-sm font-semibold leading-snug text-highlighted"
+                      :title="order.partName"
+                    >
+                      {{ order.partName }}
+                    </p>
+                    <p class="mt-0.5 truncate text-[11px] leading-tight text-muted">
+                      {{ order.requestedByName ?? "Unknown requester" }}
+                      <template v-if="order.vendorName">
+                        · {{ order.vendorName }}
+                      </template>
+                    </p>
+                  </div>
+                  <UBadge
+                    color="neutral"
+                    variant="soft"
+                    size="sm"
+                    class="shrink-0 tabular-nums"
+                    :aria-label="`Quantity ${order.quantity}`"
+                  >
+                    ×{{ order.quantity }}
+                  </UBadge>
+                </div>
+              </template>
+
+              <div class="space-y-2">
+                <p
+                  v-if="order.description"
+                  class="line-clamp-2 text-xs leading-snug text-muted"
+                >
+                  {{ order.description }}
+                </p>
+
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] leading-tight text-muted">
+                  <div
+                    v-if="order.unitPriceCents !== null"
+                    class="flex items-center gap-1 tabular-nums"
+                  >
+                    <UIcon name="i-lucide-banknote" class="size-3" />
+                    <span v-if="order.quantity > 1">
+                      <span class="font-medium text-toned">{{ formatCurrencyFromCents(order.unitPriceCents * order.quantity) }}</span>
+                      ({{ formatCurrencyFromCents(order.unitPriceCents) }} ea)
+                    </span>
+                    <span
+                      v-else
+                      class="font-medium text-toned"
+                    >{{ formatCurrencyFromCents(order.unitPriceCents) }}</span>
+                  </div>
+                  <div
+                    v-if="order.variantTitle || order.variantId"
+                    class="flex min-w-0 items-center gap-1"
+                  >
+                    <UIcon name="i-lucide-tags" class="size-3 shrink-0" />
+                    <span class="max-w-40 truncate">
+                      {{ order.variantTitle ?? order.variantId }}
+                      <span
+                        v-if="order.variantTitle && order.variantId"
+                        class="text-dimmed"
+                      >
+                        ({{ order.variantId }})
+                      </span>
+                    </span>
+                  </div>
+                  <div
+                    class="flex items-center gap-1"
+                    :title="formatDate(stageDate(order)) ?? undefined"
+                  >
+                    <UIcon
+                      name="i-lucide-clock"
+                      class="size-3"
+                    />
+                    <span>{{ stageDateLabel(order) }}</span>
+                  </div>
+                </div>
+
+                <div
+                  v-if="order.tags && order.tags.length > 0"
+                  class="flex flex-wrap gap-1"
+                >
+                  <UBadge
+                    v-for="tag in order.tags"
+                    :key="tag.id"
+                    variant="subtle"
+                    size="xs"
+                    :style="{
+                      backgroundColor: tag.color,
+                    }"
+                    :class="textColor(tag.color)"
+                  >
+                    {{ tag.name }}
+                  </UBadge>
+                </div>
+              </div>
+
+              <template #footer>
+                <div class="flex items-center justify-end gap-1">
+                  <UTooltip
+                    v-if="order.externalUrl"
+                    text="Open product page"
+                  >
+                    <UButton
+                      size="xs"
+                      variant="ghost"
+                      color="neutral"
+                      icon="i-lucide-external-link"
+                      :to="order.externalUrl"
+                      target="_blank"
+                      rel="noopener"
+                      label="Open product"
+                      aria-label="Open product page"
+                    />
+                  </UTooltip>
+                  <UTooltip text="Edit order">
+                    <UButton
+                      size="xs"
+                      variant="ghost"
+                      color="neutral"
+                      icon="i-lucide-pencil"
+                      aria-label="Edit order"
+                      :disabled="isOrderUpdating(order.id)"
+                      @click="openEditEditor(order)"
+                    />
+                  </UTooltip>
+                  <UTooltip text="Remove order">
+                    <UButton
+                      size="xs"
+                      variant="ghost"
+                      color="error"
+                      icon="i-lucide-trash-2"
+                      aria-label="Remove order"
+                      :loading="isOrderDeleting(order.id)"
+                      @click="deleteOrder(order)"
+                    />
+                  </UTooltip>
+                  <UButton
+                    v-if="getNextStatus(order.status)"
+                    size="xs"
+                    variant="soft"
+                    color="primary"
+                    :icon="statusLookup[getNextStatus(order.status)!].icon"
+                    class="ml-auto"
+                    :loading="isOrderUpdating(order.id)"
+                    @click="advanceStatus(order)"
+                  >
+                    {{ statusLookup[getNextStatus(order.status)!].actionLabel }}
+                  </UButton>
+                </div>
+              </template>
+            </UCard>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div v-else class="overflow-hidden">
+      <div class="mb-4 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p class="text-sm text-muted">
+            {{
+              statusFilter
+                ? `Total ${statusLookup[statusFilter]?.pastTense}`
+                : "Total value"
+            }}
+            · {{ filteredCount }} order{{ filteredCount === 1 ? '' : 's' }}
+          </p>
+          <p class="text-2xl font-semibold text-highlighted tabular-nums">
+            {{ formatCurrencyFromCents(totalSpentCents) ?? "$0.00" }}
+          </p>
+        </div>
+
+        <div class="flex gap-2">
+          <UDropdownMenu
+            :items="columnMenuItems"
+            :content="{ align: 'end' }"
+          >
+            <UButton
+              variant="soft"
+              color="neutral"
+              icon="i-lucide-columns-3"
+              trailing-icon="i-lucide-chevron-down"
+            >
+              Columns
+            </UButton>
+          </UDropdownMenu>
+          <UButton
+            variant="soft"
+            color="neutral"
+            icon="i-lucide-download"
+            :disabled="filteredTableRows.length === 0"
+            :loading="isExportingCsv"
+            @click="exportOrdersCsv"
+          >
+            {{ selectedFilteredTableRows.length ? `Export ${selectedFilteredTableRows.length} selected` : 'Export CSV' }}
           </UButton>
         </div>
       </div>
-    </UContainer>
+      <div v-if="isPending && ordersState.length === 0" class="space-y-2">
+        <USkeleton v-for="row in 6" :key="row" class="h-12 rounded-lg" />
+      </div>
+      <div v-else class="w-full overflow-hidden rounded-xl border border-default bg-default">
+        <div class="max-h-[70dvh] overflow-auto overscroll-none">
+          <UTable
+            v-model:sorting="sorting"
+            v-model:column-visibility="columnVisibility"
+            v-model:column-pinning="columnPinning"
+            v-model:row-selection="rowSelection"
+            v-model:pagination="pagination"
+            :columns="orderTableColumns"
+            :data="filteredTableRows"
+            :loading="isPending"
+            :get-row-id="getOrderRowId"
+            :empty="activeFilterCount ? 'No orders match these filters.' : 'No orders yet.'"
+            :pagination-options="{
+              getPaginationRowModel: getPaginationRowModel(),
+            }"
+            :ui="{
+              root: 'overflow-visible overscroll-none',
+              base: 'min-w-full w-max',
+              thead: 'bg-elevated',
+              tr: 'group',
+              th: 'h-8 bg-elevated px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap',
+              td: 'px-2 py-1.5 text-xs whitespace-nowrap',
+            }"
+            sticky
+            class="w-full"
+          >
+        <template #partName-cell="{ row }">
+          <div class="flex max-w-52 flex-col py-0.5">
+            <span
+              class="truncate text-xs font-semibold text-highlighted"
+              :title="row.original.partName"
+            >
+              {{ row.getValue("partName") }}
+            </span>
+            <span
+              v-if="row.original.description"
+              class="max-w-52 truncate text-[11px] leading-tight text-muted"
+              :title="row.original.description"
+            >
+              {{ row.original.description }}
+            </span>
+          </div>
+        </template>
+        <template #tags-cell="{ row }">
+          <div class="flex max-w-36 gap-1 overflow-hidden">
+            <UBadge
+              v-for="tag in row.original.tags"
+              :key="tag.id"
+              variant="subtle"
+              size="xs"
+              :style="{
+                backgroundColor: tag.color,
+              }"
+              :class="textColor(tag.color)"
+            >
+              {{ tag.name }}
+            </UBadge>
+          </div>
+        </template>
+        <template #status-cell="{ row }">
+          <UBadge
+            variant="soft"
+            :color="
+              statusLookup[
+                row.getValue('status') as keyof typeof statusLookup
+              ]?.color ?? 'neutral'
+            "
+          >
+            {{
+              statusLookup[
+                row.getValue("status") as keyof typeof statusLookup
+              ]?.label ?? row.getValue("status")
+            }}
+          </UBadge>
+        </template>
+
+        <template #quantity-cell="{ row }">
+          <span class="font-medium text-highlighted tabular-nums">
+            ×{{ row.getValue("quantity") }}
+          </span>
+        </template>
+
+        <template #unitPriceCents-cell="{ row }">
+          {{
+            formatCurrencyFromCents(row.getValue("unitPriceCents")) ?? "--"
+          }}
+        </template>
+
+        <template #vendorName-cell="{ row }">
+          {{ row.getValue("vendorName") ?? row.original["vendorId"] ?? "--" }}
+        </template>
+
+        <template #requestedByName-cell="{ row }">
+          {{
+            row.getValue("requestedByName") ??
+            row.getValue("requestedBy") ??
+            "--"
+          }}
+        </template>
+
+        <template #updatedAt-cell="{ row }">
+          {{ formatTableDate(row.getValue("updatedAt")) ?? "--" }}
+        </template>
+
+        <template #actions-cell="{ row }">
+          <div class="flex justify-end gap-1">
+            <UButton
+              v-if="getNextStatus(row.original.status)"
+              size="xs"
+              variant="soft"
+              color="primary"
+              :icon="statusLookup[getNextStatus(row.original.status)!].icon"
+              :loading="isOrderUpdating(row.id)"
+              @click="advanceStatus(row.original)"
+            >
+              {{ statusLookup[getNextStatus(row.original.status)!].actionLabel }}
+            </UButton>
+            <UTooltip
+              v-if="row.original.externalUrl"
+              text="Open product page"
+            >
+              <UButton
+                size="xs"
+                variant="ghost"
+                color="neutral"
+                icon="i-lucide-external-link"
+                :to="row.original.externalUrl"
+                target="_blank"
+                rel="noopener"
+                aria-label="Open product page"
+              />
+            </UTooltip>
+            <UTooltip text="Edit order">
+              <UButton
+                size="xs"
+                variant="ghost"
+                color="neutral"
+                icon="i-lucide-pencil"
+                aria-label="Edit order"
+                :disabled="isOrderUpdating(row.id)"
+                @click="openEditEditor(row.original)"
+              />
+            </UTooltip>
+            <UTooltip text="Remove order">
+              <UButton
+                size="xs"
+                variant="ghost"
+                color="error"
+                icon="i-lucide-trash-2"
+                aria-label="Remove order"
+                :loading="isOrderDeleting(row.original.id)"
+                @click="deleteOrder(row.original)"
+              />
+            </UTooltip>
+          </div>
+        </template>
+          </UTable>
+        </div>
+
+        <div
+          class="flex flex-wrap items-center justify-between gap-3 border-t border-default px-3 py-2"
+        >
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs text-muted">
+              {{ pageRangeLabel }}
+            </span>
+            <template v-if="selectedFilteredTableRows.length">
+              <UBadge color="primary" variant="soft" size="sm">
+                {{ selectedFilteredTableRows.length }} selected
+              </UBadge>
+              <UDropdownMenu :items="selectedStatusItems">
+                <UButton
+                  size="xs"
+                  color="neutral"
+                  variant="soft"
+                  icon="i-lucide-list-checks"
+                  trailing-icon="i-lucide-chevron-down"
+                  :loading="isBulkUpdating"
+                >
+                  Set status
+                </UButton>
+              </UDropdownMenu>
+              <UButton
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                icon="i-lucide-x"
+                @click="clearRowSelection"
+              >
+                Clear selection
+              </UButton>
+            </template>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <USelect
+              v-model="pagination.pageSize"
+              :items="pageSizeOptions"
+              value-key="value"
+              size="xs"
+              class="w-32"
+              aria-label="Orders per page"
+            />
+            <UPagination
+              :page="pagination.pageIndex + 1"
+              :items-per-page="pagination.pageSize"
+              :total="filteredTableRows.length"
+              size="xs"
+              :sibling-count="1"
+              @update:page="pagination.pageIndex = $event - 1"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    </template>
+
     <OrderEditorSlideover
       v-model:open="isEditorOpen"
       :mode="editorMode"
@@ -624,7 +739,7 @@
       :available-tags="availableTags"
       @submit="handleEditorSubmit"
     />
-  </div>
+  </DashboardPage>
 </template>
 
 <script setup lang="ts">
@@ -640,6 +755,7 @@ import {
 } from "vue";
 import type { TableColumn } from "#ui/types";
 import { getPaginationRowModel } from "@tanstack/vue-table";
+import { formatDistanceToNowStrict } from "date-fns";
 import type {
   Column,
   ColumnPinningState,
@@ -678,24 +794,39 @@ const statuses = [
     key: "to_order",
     label: "To order",
     pastTense: "requested",
-    description: "Parts requests - awaiting purchase",
+    description: "Requested, waiting to be purchased",
+    emptyText: "New requests land here.",
+    actionLabel: "Move to To order",
+    icon: "i-lucide-clipboard-list",
     color: "primary",
   },
   {
     key: "ordered",
     label: "Ordered",
     pastTense: "ordered",
-    description: "Placed orders - awaiting arrival",
+    description: "Purchased, waiting to arrive",
+    emptyText: "Drag a request here once it’s been bought.",
+    actionLabel: "Mark ordered",
+    icon: "i-lucide-shopping-cart",
     color: "warning",
   },
   {
     key: "arrived",
     label: "Arrived",
     pastTense: "arrived",
-    description: "Items received",
+    description: "Received",
+    emptyText: "Drag an order here when it shows up.",
+    actionLabel: "Mark arrived",
+    icon: "i-lucide-package-check",
     color: "success",
   },
 ] as const;
+
+const statusTextClass: Record<string, string> = {
+  to_order: "text-primary",
+  ordered: "text-warning",
+  arrived: "text-success",
+};
 
 type StatusKey = (typeof statuses)[number]["key"];
 
@@ -723,7 +854,12 @@ const viewOptions = ref([
 
 type ViewMode = (typeof viewOptions)["value"][number]["value"];
 
-const viewMode = ref<ViewMode>("board");
+// Remember the chosen layout between visits (cookie so SSR renders it too).
+const viewMode = useCookie<ViewMode>("orders-view", {
+  default: () => "board",
+  sameSite: "lax",
+  maxAge: 60 * 60 * 24 * 365,
+});
 
 function vendorKeyForOrder(order: Pick<Order, "vendorId" | "vendorName">) {
   if (order.vendorId) {
@@ -959,6 +1095,7 @@ const csvExportColumns: CsvColumn[] = [
 const {
   data: ordersData,
   isPending,
+  isFetching,
   refetch,
   isError,
   error,
@@ -997,9 +1134,25 @@ const tableRows = computed<OrderTableRow[]>(() =>
 const startDate = ref<string | undefined>(undefined);
 const endDate = ref<string | undefined>(undefined);
 const searchFilter = ref("");
-const vendorFilter = ref<string>("");
+const vendorFilter = ref<string | undefined>(undefined);
 const statusFilter = ref<StatusKey | undefined>(undefined);
-const tagFilter = ref<string>("");
+const tagFilter = ref<string | undefined>(undefined);
+
+const shortDateFormatter = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+});
+
+const dateRangeLabel = computed(() => {
+  const from = startDate.value ? new Date(startDate.value + "T00:00:00") : null;
+  const to = endDate.value ? new Date(endDate.value + "T00:00:00") : null;
+  if (from && to) {
+    return `${shortDateFormatter.format(from)} – ${shortDateFormatter.format(to)}`;
+  }
+  if (from) return `From ${shortDateFormatter.format(from)}`;
+  if (to) return `Until ${shortDateFormatter.format(to)}`;
+  return "Any date";
+});
 
 const vendorsForFilter = computed(() => {
   const map = new Map<string, { id: string; name: string }>();
@@ -1147,10 +1300,65 @@ function clearFilters() {
   searchFilter.value = "";
   startDate.value = undefined;
   endDate.value = undefined;
-  vendorFilter.value = "";
+  vendorFilter.value = undefined;
   statusFilter.value = undefined;
-  tagFilter.value = "";
+  tagFilter.value = undefined;
 }
+
+function columnTotalCents(items: OrderTableRow[]) {
+  return items.reduce(
+    (sum, order) => sum + (order.unitPriceCents ?? 0) * (order.quantity ?? 0),
+    0,
+  );
+}
+
+/** The date that matters most for an order's current stage. */
+function stageDate(order: Order) {
+  if (order.status === "arrived") return order.arrivedAt ?? order.updatedAt;
+  if (order.status === "ordered") return order.orderedAt ?? order.updatedAt;
+  return order.createdAt ?? order.updatedAt;
+}
+
+function stageDateLabel(order: Order) {
+  const verb =
+    order.status === "arrived"
+      ? "Arrived"
+      : order.status === "ordered"
+        ? "Ordered"
+        : "Requested";
+  const when = formatRelative(stageDate(order));
+  return when ? `${verb} ${when}` : verb;
+}
+
+function formatRelative(value: string | null | undefined) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const diffMs = Date.now() - date.getTime();
+  if (diffMs < 60_000) return "just now";
+  if (diffMs < 7 * 24 * 60 * 60 * 1000) {
+    return formatDistanceToNowStrict(date, { addSuffix: true });
+  }
+  const sameYear = date.getFullYear() === new Date().getFullYear();
+  return `on ${new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: sameYear ? undefined : "numeric",
+  }).format(date)}`;
+}
+
+const searchInput = useTemplateRef<{ inputRef?: HTMLInputElement }>(
+  "searchInput",
+);
+
+defineShortcuts({
+  n: () => {
+    // Don't stack the editor on top of another open dialog.
+    if (isEditorOpen.value || document.querySelector('[role="dialog"]')) return;
+    openCreateEditor();
+  },
+  "/": () => searchInput.value?.inputRef?.focus(),
+});
 
 const activeFilterCount = computed(() =>
   [
@@ -1479,7 +1687,16 @@ function onDragLeave(status: StatusKey) {
   }
 }
 
-async function deleteOrder(order: Pick<Order, "id">) {
+const confirm = useConfirm();
+
+async function deleteOrder(order: Pick<Order, "id" | "partName">) {
+  const confirmed = await confirm({
+    title: `Remove “${order.partName}”?`,
+    description: "This permanently deletes the order for everyone on the team.",
+    confirmLabel: "Remove order",
+    icon: "i-lucide-trash-2",
+  });
+  if (!confirmed) return;
   setDeleting(order.id, true);
   try {
     await $fetch(`/api/orders/${order.id}`, { method: "DELETE" });
@@ -1617,7 +1834,7 @@ function formatCurrencyFromCents(value?: number | null) {
 }
 
 const hasEmptyState = computed(
-  () => !isPending.value && ordersState.value.length === 0,
+  () => !isPending.value && !isError.value && ordersState.value.length === 0,
 );
 
 watchEffect(() => {

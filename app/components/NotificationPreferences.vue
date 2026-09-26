@@ -7,7 +7,7 @@
     <template v-else-if="preferences">
       <!-- Order Notifications Section -->
       <div>
-        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
+        <h3 class="text-sm font-semibold text-highlighted mb-3">
           <div class="flex items-center gap-2">
             <UIcon name="i-lucide-package" class="w-4 h-4" />
             Orders
@@ -41,7 +41,7 @@
       <USeparator />
 
       <div class="hidden">
-        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
+        <h3 class="text-sm font-semibold text-highlighted mb-3">
           <div class="flex items-center gap-2">
             <UIcon name="i-lucide-mail" class="w-4 h-4" />
             Email digest
@@ -61,7 +61,7 @@
             class="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800"
           >
             <label
-              class="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2"
+              class="block text-sm font-medium text-highlighted mb-2"
             >
               Digest delivery time
             </label>
@@ -73,7 +73,7 @@
                 :disabled="isUpdating"
               />
             </div>
-            <p class="text-xs text-gray-500 mt-2">
+            <p class="text-xs text-muted mt-2">
               Your daily digest will be sent at {{ digestTimeFormatted }}
             </p>
           </div>
@@ -82,7 +82,7 @@
     </template>
 
     <div v-else class="text-center py-8">
-      <p class="text-sm text-gray-500">Failed to load preferences</p>
+      <p class="text-sm text-muted">Failed to load preferences</p>
     </div>
   </div>
 </template>

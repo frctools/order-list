@@ -199,7 +199,7 @@ function handleSubmit() {
       <UPageCard>
         <div class="flex h-full flex-col justify-between gap-4">
           <div class="space-y-2">
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+            <h2 class="text-lg font-semibold text-highlighted">
               Kit items
             </h2>
             <p class="text-sm text-muted">
@@ -227,7 +227,7 @@ function handleSubmit() {
       <div class="space-y-4">
         <div class="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+            <h2 class="text-lg font-semibold text-highlighted">
               Search products
             </h2>
             <p class="text-sm text-muted">

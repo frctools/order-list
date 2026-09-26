@@ -38,6 +38,7 @@ type ProductHistoryResponse = {
 }
 
 const route = useRoute()
+const inDashboard = inject('dashboard-layout', false)
 const sourceUrl = computed(() =>
   typeof route.query.url === 'string' ? route.query.url : undefined
 )
@@ -58,6 +59,10 @@ const { data, status, error, refresh } = await useFetch<ProductHistoryResponse>(
 )
 
 const product = computed(() => data.value?.product ?? null)
+const breadcrumbItems = computed(() => [
+  { label: 'Search parts', to: '/search', icon: 'i-lucide-search' },
+  { label: product.value?.title ?? 'Product' }
+])
 const cleanDescription = computed(() =>
   (product.value?.description ?? '').replace(/<[^>]*>?/gm, '').trim()
 )
@@ -104,13 +109,17 @@ function getAddToOrderUrl(url: string) {
 </script>
 
 <template>
-  <UContainer class="py-8">
+  <DashboardPage
+    id="product"
+    :standalone-header="false"
+  >
+    <template #title>
+      <UBreadcrumb :items="breadcrumbItems" />
+    </template>
+
     <UBreadcrumb
-      class="mb-6"
-      :items="[
-        { label: 'Search parts', to: '/search', icon: 'i-lucide-search' },
-        { label: product?.title ?? 'Product' }
-      ]"
+      v-if="!inDashboard"
+      :items="breadcrumbItems"
     />
 
     <div v-if="status === 'pending'" class="space-y-6">
@@ -300,5 +309,5 @@ function getAddToOrderUrl(url: string) {
         </UCard>
       </section>
     </div>
-  </UContainer>
+  </DashboardPage>
 </template>

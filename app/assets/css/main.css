@@ -17,3 +17,9 @@
   --color-havelock-blue-900: #2e507a;
   --color-havelock-blue-950: #20324b;
 }
+
+/* Tabular figures keep prices and counts aligned in tables and cards. */
+.tabular-nums,
+td {
+  font-variant-numeric: tabular-nums;
+}

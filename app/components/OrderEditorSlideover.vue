@@ -2,196 +2,213 @@
   <USlideover
     v-model:open="isOpen"
     side="right"
+    :title="headerTitle"
+    :description="headerDescription"
+    :ui="{ body: 'sm:p-6', footer: 'justify-between gap-2' }"
   >
-    <template #content>
-      <UCard class="flex h-full flex-col overflow-y-auto">
-        <template #header>
-          <div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-              {{ headerTitle }}
-            </h3>
-            <p class="text-sm text-gray-500">
-              {{ headerDescription }}
-            </p>
-          </div>
-        </template>
-
-        <UForm
-          ref="orderForm"
-          :state="formState"
-          :schema="orderFormSchema"
-          class="flex flex-1 flex-col gap-6"
-          @submit="handleSubmit"
-        >
-          <div class="grid flex-1 gap-4">
+    <template #body>
+      <UForm
+        id="order-editor-form"
+        ref="orderForm"
+        :state="formState"
+        :schema="orderFormSchema"
+        class="grid gap-5"
+        novalidate
+        @submit="handleSubmit"
+      >
+        <div class="grid gap-3 rounded-lg border border-default bg-elevated/40 p-3">
+          <div class="overflow-hidden rounded-md border border-default bg-default">
             <SearchProduct @select="formState.externalUrl = $event" />
-            <UFormField
-              name="externalUrl"
-              label="External link"
-            >
-              <UInput
-                v-model="formState.externalUrl"
-                placeholder="https://supplier.com/listing"
-                size="xl"
-                class="w-full"
-                autofocus
-              />
-            </UFormField>
-
-            <div
+          </div>
+          <UFormField
+            name="externalUrl"
+            label="Or paste a product link"
+            :hint="isLookingUpVendor ? undefined : 'Autofills name, vendor & price'"
+          >
+            <template
               v-if="isLookingUpVendor"
-              class="text-sm text-gray-500"
+              #hint
             >
-              <UIcon
-                name="i-lucide:loader-circle"
-                class="animate-spin"
-              />
-              Looking up part information...
-            </div>
-
-            <UFormField
-              name="partName"
-              label="Part name"
-              required
-            >
-              <UInput
-                v-model="formState.partName"
-                placeholder="1/2 in. Round ID Flanged Shielded Bearing (FR8ZZ)"
-                class="w-full"
-              />
-            </UFormField>
-
-            <div class="grid gap-4 md:grid-cols-2">
-              <UFormField
-                name="quantity"
-                label="Quantity"
-                required
-              >
-                <UInput
-                  v-model.number="formState.quantity"
-                  type="number"
-                  min="1"
+              <span class="flex items-center gap-1 text-primary">
+                <UIcon
+                  name="i-lucide-loader-circle"
+                  class="size-3.5 animate-spin"
                 />
-              </UFormField>
-              <UFormField
-                name="unitPrice"
-                label="Unit price (USD)"
-              >
-                <UInput
-                  v-model="formState.unitPrice"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="49.99"
-                />
-              </UFormField>
-            </div>
+                Looking up part…
+              </span>
+            </template>
+            <UInput
+              v-model="formState.externalUrl"
+              type="url"
+              icon="i-lucide-link"
+              placeholder="https://www.revrobotics.com/…"
+              class="w-full"
+              autofocus
+            />
+          </UFormField>
+        </div>
 
-            <div class="grid gap-4 md:grid-cols-2">
-              <UFormField
-                name="vendorId"
-                label="Vendor"
-              >
-                <UInput
-                  v-model="formState.vendorId"
-                  placeholder="Vendor name or identifier"
-                />
-              </UFormField>
-              <UFormField
-                name="variantId"
-                label="Variant"
-              >
-                <template v-if="variantOptions.length">
-                  <USelectMenu
-                    v-model="formState.variantId"
-                    :items="variantOptions"
-                    value-key="value"
-                    searchable
-                    placeholder="Select variant"
-                  />
-                </template>
-                <template v-else>
-                  <UInput
-                    v-model="formState.variantId"
-                    placeholder="Variant SKU or ID"
-                  />
-                </template>
-              </UFormField>
-            </div>
+        <UFormField
+          name="partName"
+          label="Part name"
+          required
+        >
+          <UInput
+            v-model="formState.partName"
+            placeholder="1/2 in. Round ID Flanged Shielded Bearing (FR8ZZ)"
+            class="w-full"
+          />
+        </UFormField>
 
-            <UFormField
-              name="variantTitle"
-              label="Variant name"
-            >
-              <UInput
-                v-model="formState.variantTitle"
-                placeholder="Variant or configuration"
-                class="w-full"
+        <div class="grid grid-cols-2 gap-4">
+          <UFormField
+            name="quantity"
+            label="Quantity"
+            required
+          >
+            <UInputNumber
+              v-model="formState.quantity"
+              :min="1"
+              class="w-full"
+            />
+          </UFormField>
+          <UFormField
+            name="unitPrice"
+            label="Unit price"
+            :hint="lineTotalLabel ?? undefined"
+          >
+            <UInput
+              v-model="formState.unitPrice"
+              type="number"
+              inputmode="decimal"
+              min="0"
+              step="0.01"
+              placeholder="0.00"
+              icon="i-lucide-dollar-sign"
+              class="w-full"
+            />
+          </UFormField>
+        </div>
+
+        <div class="grid gap-4 sm:grid-cols-2">
+          <UFormField
+            name="vendorId"
+            label="Vendor"
+          >
+            <UInput
+              v-model="formState.vendorId"
+              placeholder="e.g. REV Robotics"
+              class="w-full"
+            />
+          </UFormField>
+          <UFormField
+            name="variantId"
+            label="Variant"
+          >
+            <USelectMenu
+              v-if="variantOptions.length"
+              v-model="formState.variantId"
+              :items="variantOptions"
+              value-key="value"
+              placeholder="Select variant"
+              class="w-full"
+            />
+            <UInput
+              v-else
+              v-model="formState.variantId"
+              placeholder="SKU or variant ID"
+              class="w-full"
+            />
+          </UFormField>
+        </div>
+
+        <UFormField
+          v-if="!variantOptions.length"
+          name="variantTitle"
+          label="Variant name"
+        >
+          <UInput
+            v-model="formState.variantTitle"
+            placeholder="Size, color, or configuration"
+            class="w-full"
+          />
+        </UFormField>
+
+        <UFormField
+          name="description"
+          label="Notes"
+        >
+          <UTextarea
+            v-model="formState.description"
+            :rows="3"
+            autoresize
+            placeholder="Why it’s needed, specs, or supplier instructions"
+            class="w-full"
+          />
+        </UFormField>
+
+        <UFormField
+          v-if="availableTags && availableTags.length > 0"
+          name="tagIds"
+          label="Tags"
+        >
+          <USelectMenu
+            v-model="formState.tagIds"
+            :items="tagOptions"
+            value-key="value"
+            multiple
+            placeholder="Add tags"
+            class="w-full"
+          >
+            <template #item-leading="{ item }">
+              <span
+                class="size-2.5 shrink-0 rounded-full"
+                :style="{ backgroundColor: item.color }"
               />
-            </UFormField>
+            </template>
+          </USelectMenu>
+        </UFormField>
+        <p
+          v-else
+          class="flex items-center gap-2 text-xs text-muted"
+        >
+          <UIcon
+            name="i-lucide-tag"
+            class="size-3.5"
+          />
+          <span>
+            Organize orders with
+            <ULink
+              to="/docs/features/tags"
+              class="font-medium text-primary"
+            >tags</ULink>,
+            created in organization settings.
+          </span>
+        </p>
+      </UForm>
+    </template>
 
-            <UFormField
-              name="description"
-              label="Notes"
-            >
-              <UTextarea
-                v-model="formState.description"
-                :rows="3"
-                placeholder="Add context, specs, or supplier instructions"
-              />
-            </UFormField>
-
-            <UFormField
-              v-if="availableTags && availableTags.length > 0"
-              name="tagIds"
-              label="Tags"
-            >
-              <USelectMenu
-                v-model="formState.tagIds"
-                :items="tagOptions"
-                value-key="value"
-                multiple
-                searchable
-                placeholder="Select tags"
-              >
-                <template #item="{ item }">
-                  <span
-                    class="mr-2 inline-block h-3 w-3 rounded-full"
-                    :style="{ backgroundColor: item.color }"
-                  />
-                  {{ item.label }}
-                </template>
-              </USelectMenu>
-            </UFormField>
-            <div v-else>
-              <ProseCallout
-                type="tip"
-                icon="i-lucide-tag"
-                to="/docs/features/tags"
-              >
-                Add tags to your orders to help organize and categorize them.
-              </ProseCallout>
-            </div>
-          </div>
-
-          <div class="flex justify-end gap-2">
-            <UButton
-              variant="ghost"
-              color="neutral"
-              @click="handleCancel"
-            >
-              Cancel
-            </UButton>
-            <UButton
-              type="submit"
-              icon="i-lucide-save"
-              :loading="loading"
-            >
-              {{ actionLabel }}
-            </UButton>
-          </div>
-        </UForm>
-      </UCard>
+    <template #footer>
+      <p class="hidden text-xs text-muted sm:block">
+        <UKbd value="meta" /> <UKbd value="enter" /> to save
+      </p>
+      <div class="ml-auto flex gap-2">
+        <UButton
+          variant="ghost"
+          color="neutral"
+          @click="handleCancel"
+        >
+          Cancel
+        </UButton>
+        <UButton
+          type="submit"
+          form="order-editor-form"
+          :icon="mode === 'edit' ? 'i-lucide-check' : 'i-lucide-plus'"
+          :loading="loading"
+        >
+          {{ actionLabel }}
+        </UButton>
+      </div>
     </template>
   </USlideover>
 </template>
@@ -306,6 +323,22 @@ const headerDescription = computed(() =>
 const actionLabel = computed(() =>
   props.mode === 'edit' ? 'Save changes' : 'Create order'
 )
+
+const lineTotalLabel = computed(() => {
+  const unit = Number(formState.unitPrice)
+  const quantity = Number(formState.quantity)
+  if (!formState.unitPrice || !Number.isFinite(unit) || quantity <= 1) return null
+  return `${formatVariantPriceLabel(String(unit * quantity))} total`
+})
+
+defineShortcuts({
+  meta_enter: {
+    usingInput: true,
+    handler: () => {
+      if (isOpen.value && !props.loading) orderForm.value?.submit()
+    }
+  }
+})
 
 watch(
   () => [isOpen.value, props.mode, props.initialOrder],
@@ -469,7 +502,7 @@ function handleSubmit(event: FormSubmitEvent<OrderFormSchema>) {
     description: event.data.description ?? undefined,
     vendorId: event.data.vendorId ?? null,
     unitPriceCents: event.data.unitPrice != null
-      ? Math.ceil(Number(event.data.unitPrice) * 100)
+      ? Math.round(Number(event.data.unitPrice) * 100)
       : undefined,
     variantId: event.data.variantId ?? undefined,
     variantTitle: event.data.variantTitle ?? undefined,

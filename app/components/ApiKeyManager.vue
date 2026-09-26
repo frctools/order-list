@@ -31,10 +31,10 @@
       <template #header>
         <div class="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            <h2 class="text-lg font-semibold text-highlighted">
               API keys
             </h2>
-            <p class="text-sm text-gray-500">
+            <p class="text-sm text-muted">
               Keys grant access to this organization. Treat them like passwords.
             </p>
           </div>
@@ -88,7 +88,7 @@
       </div>
       <p
         v-else-if="!keys.length"
-        class="py-10 text-center text-sm text-gray-500"
+        class="py-10 text-center text-sm text-muted"
       >
         No API keys yet.
       </p>
@@ -102,15 +102,15 @@
           class="flex flex-wrap items-center justify-between gap-3 py-3"
         >
           <div class="min-w-0">
-            <p class="font-medium text-gray-900 dark:text-gray-100">
+            <p class="font-medium text-highlighted">
               {{ key.name || 'Unnamed key' }}
             </p>
-            <p class="font-mono text-xs text-gray-500">
+            <p class="font-mono text-xs text-muted">
               {{ key.start || key.prefix || 'Hidden' }}••••••
             </p>
           </div>
           <div class="flex items-center gap-3">
-            <span class="text-xs text-gray-500">
+            <span class="text-xs text-muted">
               Created {{ formatDate(key.createdAt) }}
             </span>
             <UButton
@@ -143,6 +143,7 @@ const props = defineProps<{ organizationId: string }>()
 
 const auth = useAuth()
 const toast = useToast()
+const confirm = useConfirm()
 const name = ref('')
 const creating = ref(false)
 const createdKey = ref<string | null>(null)
@@ -207,7 +208,13 @@ async function copyCreatedKey() {
 }
 
 async function deleteKey(key: ApiKeySummary) {
-  if (!window.confirm(`Revoke "${key.name || 'this API key'}"? This cannot be undone.`)) return
+  const confirmed = await confirm({
+    title: `Revoke ${key.name ? `“${key.name}”` : 'this API key'}?`,
+    description: 'Anything using this key will immediately lose access. This can’t be undone.',
+    confirmLabel: 'Revoke key',
+    icon: 'i-lucide-key-round'
+  })
+  if (!confirmed) return
   const next = new Set(deletingIds.value)
   next.add(key.id)
   deletingIds.value = next
