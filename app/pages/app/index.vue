@@ -1,5 +1,8 @@
 <template>
-  <DashboardPage id="orders">
+  <DashboardPage
+    id="orders"
+    body-class="overscroll-none"
+  >
     <template #title>
       <div class="flex min-w-0 items-center gap-2">
         <h1 class="hidden shrink-0 font-semibold text-highlighted sm:block">

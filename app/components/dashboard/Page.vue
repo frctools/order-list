@@ -4,10 +4,12 @@ withDefaults(defineProps<{
   title?: string
   description?: string
   standaloneHeader?: boolean
+  bodyClass?: string
 }>(), {
   title: undefined,
   description: undefined,
-  standaloneHeader: true
+  standaloneHeader: true,
+  bodyClass: undefined
 })
 
 const inDashboard = inject('dashboard-layout', false)
@@ -17,6 +19,7 @@ const inDashboard = inject('dashboard-layout', false)
   <UDashboardPanel
     v-if="inDashboard"
     :id="id"
+    :ui="{ body: bodyClass }"
   >
     <template #header>
       <UDashboardNavbar :title="title">

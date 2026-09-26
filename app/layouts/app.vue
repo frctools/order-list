@@ -85,7 +85,10 @@ const links = computed<NavigationMenuItem[][]>(() => [
       label: 'Support development',
       icon: 'i-lucide-heart',
       to: 'https://www.buymeacoffee.com/grahamsh',
-      target: '_blank'
+      target: '_blank',
+      ui: {
+        linkLeadingIcon: 'text-pink-500'
+      }
       
     }
   ]
