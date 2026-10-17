@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vendord
+spec:
+  # Nitro's scheduled scrape runs in each replica, so keep one replica.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: vendord
+  template:
+    metadata:
+      labels:
+        app: vendord
+    spec:
+      containers:
+        - name: vendord
+          image: ghcr.io/frctools/order-list-vendord:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: vendord-config
+                  key: DATABASE_URL
+            - name: MEILISEARCH_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: vendord-config
+                  key: MEILISEARCH_HOST
+                  optional: true
+            - name: MEILISEARCH_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vendord-config
+                  key: MEILISEARCH_API_KEY
+                  optional: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
