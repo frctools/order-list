@@ -94,7 +94,7 @@ export default defineNuxtConfig({
         vpc_services: [
           {
             binding: "VPC_SERVICE",
-            service_id: "019a94d0-60c0-7fb2-bf4b-7503c5426321",
+            service_id: "01a150f3-4503-7641-a310-29cbb64034fe",
             remote: true,
           },
         ],
